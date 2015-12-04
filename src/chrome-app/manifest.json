@@ -1,0 +1,33 @@
+{
+    "app": {
+        "background": {
+            "scripts": [
+                "background.js"
+            ]
+        }
+    },
+    "description": "chftp",
+    "icons": {
+        "16": "image/icon_16.png",
+        "128": "image/icon_128.png"
+    },
+    "manifest_version": 2,
+    "minimum_chrome_version": "43",
+    "name": "chftp",
+    "permissions": [
+        "storage",
+        "webview"
+    ],
+    "short_name": "chftp",
+    "version": "0.0.1",
+    "webview": {
+        "partitions": [
+            {
+                "name": "app",
+                "accessible_resources": [
+                    "*"
+                ]
+            }
+        ]
+    }
+}

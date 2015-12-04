@@ -1,2 +1,2 @@
 # chftp
-A Chrome OS server.
+A Chrome OS FTP server.

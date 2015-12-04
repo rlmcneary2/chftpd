@@ -1,0 +1,15 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "build": true,
+        "node_modules": true
+    },
+    "javascript.validate.lint.comparisonOperatorsNotStrict": "error",
+    "javascript.validate.lint.curlyBracketsMustNotBeOmitted": "warning",
+    "javascript.validate.lint.functionsInsideLoops": "ignore",
+    "javascript.validate.lint.missingSemicolon": "warning"
+}
