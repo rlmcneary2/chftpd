@@ -18,7 +18,7 @@ module.exports = React.createClass({
                 <input autofocus="true" inputMode="url" placeholder="localhost" type="text" />
                 <input inputMode="numeric" placeholder="21" type="text" />
                 <button onClick={onstart.bind(this)}>Start</button>
-                <p>{this.state.output}</p>
+                <pre>{this.state.output}</pre>
             </div>
         );
     }
@@ -35,6 +35,11 @@ function onstart () {
         var decodedString = decoder.decode(dataView);
         self.setState({ output: self.state.output + decodedString });
     }))
+    .then(function(results){
+        var message = "";
+        results.forEach(r => message += `address: ${r.address}:${r.port}\r\n`);
+        self.setState({ output: message });
+    })
     .catch(function(err){
         console.error(`tcpServer error: ${err}.`);
     });

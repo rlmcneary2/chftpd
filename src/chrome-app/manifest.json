@@ -11,6 +11,7 @@
         "16": "image/icon_16.png",
         "128": "image/icon_128.png"
     },
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAgRnX7XJRsmO/kDxMuW6VTbJiHobGA/WZnD4xeOdyvLPQmOpKomG92qVWQ0JCQJxxCr4dZQ8zkg0FgXihgspjR/VhudeFD1JY+CbX4raIQGTpc3A2K4GVKyWZO8rslC4nF0nSWF7k+BkAN/+3A1d/lAIv5ldhyrmBDQ7J2smN4xp00YcKq0+sADdLqZDU/OCMNi8B/Fp2Un9XSJ2ID+GZYBj9tnu6fa848itz+oavyU2hT38KEngfwbCPnLVoVnlSsFojA2OREun8eqsZ/i9jnOZIvd2wFKyuySwmOT4IYGuTNxO2beeIABITfQoIH5arwqM6ED1u+eldVFFQvh3OzwIDAQAB",
     "manifest_version": 2,
     "minimum_chrome_version": "43",
     "name": "chftpd",
@@ -21,10 +22,10 @@
     "short_name": "chftpd",
     "sockets": {
       "tcpServer": {
-          "listen": [":21"]
+          "listen": [":*"]
       }  
     },
-    "version": "0.0.1",
+    "version": "0.0.1.2",
     "webview": {
         "partitions": [
             {
