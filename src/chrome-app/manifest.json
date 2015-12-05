@@ -6,19 +6,24 @@
             ]
         }
     },
-    "description": "chftp",
+    "description": "chftpd",
     "icons": {
         "16": "image/icon_16.png",
         "128": "image/icon_128.png"
     },
     "manifest_version": 2,
     "minimum_chrome_version": "43",
-    "name": "chftp",
+    "name": "chftpd",
     "permissions": [
         "storage",
-        "webview"
+        "system.network"
     ],
-    "short_name": "chftp",
+    "short_name": "chftpd",
+    "sockets": {
+      "tcpServer": {
+          "listen": [":21"]
+      }  
+    },
     "version": "0.0.1",
     "webview": {
         "partitions": [
