@@ -1,3 +1,4 @@
+var log = require("../logging/logger");
 
 
 module.exports = {
@@ -29,7 +30,7 @@ function tcpCreateAll(port, receiveCallback) {
 
             Promise.all(promises)
                 .then(function (results) {
-                    console.log(`tcpServer.js tcpCreateAll() - resolving: ${JSON.stringify(results) }`);
+                    log.info `tcpServer.js tcpCreateAll() - resolving: ${JSON.stringify(results)}`;
                     resolve(results);
                 })
                 .catch(function (err) {
