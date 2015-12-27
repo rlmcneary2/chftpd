@@ -1,7 +1,7 @@
 "use strict";
 
 var React = require("react");
-var TcpServer = require("../tcp/tcpServer");
+var TcpServer = require("../tcp/TcpServer");
 
 var _tcpServer = new TcpServer();
 
