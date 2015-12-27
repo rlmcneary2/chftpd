@@ -1,42 +1,64 @@
-var log = require("../logging/logger");
+"use strict";
 
 
-module.exports = {
+class TcpServer {
 
-    port: 0, // Must be allowed by the chrome app manifest.json file.
+    constructor() {
+        this.address = null;
+        this.port = 0;
+    }
 
-    startListening(receiveCallback) {
-        return tcpCreateAll(this.port, receiveCallback)
+    getNetworkInterfaces() {
+        return getIPv4NetworkInterfaces();
+    }
+
+    startListening(address, receiveCallback) {
+        this.address = address;
+        return tcpCreateAndListen(this.address, this.port, receiveCallback)
             .then(function (results) {
                 return results;
             });
     }
 
-};
+}
 
 
-function tcpCreateAll(port, receiveCallback) {
+module.exports = TcpServer;
+
+
+function getIPv4NetworkInterfaces() {
     return new Promise(function (resolve, reject) {
         chrome.system.network.getNetworkInterfaces(function (networkInterfaces) {
-            var promises = networkInterfaces.map(function (networkInterface) {
-                return tcpCreate()
-                    .then(function (socketId) {
-                        return tcpListen(socketId, networkInterface.address, port, receiveCallback)
-                            .then(function (listenData) {
-                                return { socketId, address: networkInterface.address, port: listenData.port };
-                            });
+            var err = chrome.runtime.lastError;
+            if (err) {
+                reject(err);
+            }
+
+            if (typeof networkInterfaces === "undefined" || networkInterfaces === null) {
+                resolve([]);
+            }
+
+            var interfaces = [];
+            for (var i = 0; i < networkInterfaces.length; i++) {
+                if (networkInterfaces[i].prefixLength === 24) {
+                    interfaces.push(networkInterfaces[i]);
+                }
+            }
+
+            resolve(interfaces);
+        });
+    });
+}
+
+function tcpCreateAndListen(address, port, receiveCallback) {
+    return new Promise(function (resolve, reject) {
+        tcpCreate()
+            .then(function (socketId) {
+                tcpListen(socketId, address, port, receiveCallback)
+                    .then(function (listenData) {
+                        resolve({ socketId, address, port: listenData.port });
                     });
             });
-
-            Promise.all(promises)
-                .then(function (results) {
-                    log.info `tcpServer.js tcpCreateAll() - resolving: ${JSON.stringify(results)}`;
-                    resolve(results);
-                })
-                .catch(function (err) {
-                    reject(err);
-                });
-        });
     });
 }
 
