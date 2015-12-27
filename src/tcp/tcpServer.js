@@ -72,7 +72,7 @@ function tcpListen(socketId, address, port, receiveCallback) {
 
 function tcpListenHandler(result, socketId, port, receiveCallback) {
     if (result < 0) {
-        throw `tcpServer.js tcpListenHandler() - listen error result: ${result}.`
+        throw `tcpServer.js tcpListenHandler() - listen error result: ${result}.`;
     }
 
     return Promise.resolve()
