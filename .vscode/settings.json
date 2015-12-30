@@ -5,8 +5,10 @@
     "files.exclude": {
         "**/.git": true,
         "**/.DS_Store": true,
+        ".vscode": true,
         "build": true,
-        "node_modules": true
+        "node_modules": true,
+        "npm-debug.log": true
     },
     "javascript.validate.lint.comparisonOperatorsNotStrict": "error",
     "javascript.validate.lint.curlyBracketsMustNotBeOmitted": "warning",
