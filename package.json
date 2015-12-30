@@ -43,5 +43,8 @@
     "react-dom": "^0.14.3",
     "rimraf": "^2.4.4",
     "webpack": "^1.12.9"
+  },
+  "dependencies": {
+    "eventemitter3": "^1.1.1"
   }
 }

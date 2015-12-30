@@ -1,9 +1,13 @@
 "use strict";
 
 
-class TcpServer {
+var EventEmitter = require("eventemitter3");
+
+
+class TcpServer extends EventEmitter {
 
     constructor() {
+        super();
         this.address = null;
         this.port = 0;
     }
@@ -40,7 +44,8 @@ function getIPv4NetworkInterfaces() {
 
             var interfaces = [];
             for (var i = 0; i < networkInterfaces.length; i++) {
-                if (networkInterfaces[i].prefixLength === 24) {
+                // This test is probably guaranteed to fail someday. If there is no ':' then it is not an IPv6 address.
+                if (networkInterfaces[i].address.indexOf(":") < 0) {
                     interfaces.push(networkInterfaces[i]);
                 }
             }

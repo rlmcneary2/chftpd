@@ -1,9 +1,9 @@
 "use strict";
 
-var React = require("react");
-var TcpServer = require("../tcp/TcpServer");
 
-var _tcpServer = new TcpServer();
+var React = require("react");
+var ftpServer = require("../ftp/ftpServer");
+
 
 module.exports = React.createClass({
     
@@ -49,10 +49,19 @@ module.exports = React.createClass({
 
 function componentMounted(){
     var self = this;
-    _tcpServer.getNetworkInterfaces()
+    ftpServer.getNetworkInterfaces()
         .then(function(interfaces){
             self.setState({interfaces, selectedInterfaceIndex: 0}); 
         });
+        
+    ftpServer.on("response-arrived", responseArrivedHandler, this);
+}
+
+function responseArrivedHandler (responseBody){
+    var dataView = new DataView(responseBody);
+    var decoder = new TextDecoder("utf-8");
+    var decodedString = decoder.decode(dataView);
+    this.setState({ output: this.state.output + decodedString });
 }
 
 function interfaceSelected(evt){
@@ -72,18 +81,13 @@ function startServer () {
     
     var address = this.state.interfaces[this.state.selectedInterfaceIndex].address;
     var self = this;
-    Promise.resolve(_tcpServer.startListening(address, function(arrBuffer){
-        var dataView = new DataView(arrBuffer);
-        var decoder = new TextDecoder("utf-8");
-        var decodedString = decoder.decode(dataView);
-        self.setState({ output: self.state.output + decodedString });
-    }))
-    .then(function(result){
-        var message = self.state.output;
-        message += `address: ${result.address}:${result.port}\r\n`;
-        self.setState({ ftpPort: result.port, output: message });
-    })
-    .catch(function(err){
-        console.error(`_tcpServer error: ${err}.`);
-    });
+    Promise.resolve(ftpServer.startListening(address))
+        .then(function(result){
+            var message = self.state.output;
+            message += `address: ${result.address}:${result.port}\r\n`;
+            self.setState({ ftpPort: result.port, output: message });
+        })
+        .catch(function(err){
+            console.error(`ftpServer error: ${err}.`);
+        });
 }
