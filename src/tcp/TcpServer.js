@@ -16,12 +16,30 @@ class TcpServer extends EventEmitter {
         return getIPv4NetworkInterfaces();
     }
 
-    startListening(address, receiveCallback) {
+    /**
+     * Start listening for connections from clients.
+     * @param {string} address The network interface address to bind to.
+     * @param {object} options An object with properties needed to process requests and responses.
+     * @param {function} options.acceptCallback This function will be invoked when a connection is accepted.
+     * @param {function} options.receiveCallback Invoked when data is received from an accepted connection.
+     * @returns {Promise|object} A Promise that resolves to an object with socket information.
+     */
+    startListening(address, options) {
         this.address = address;
-        return tcpCreateAndListen(this.address, this.port, receiveCallback)
-            .then(function (results) {
-                return results;
-            });
+        return tcpCreateAndListen(this.address, this.port, options);
+            // .then(function (results) {
+            //     return results;
+            // });
+    }
+
+    /**
+     * Send data to a client.
+     * @param {number} socketId The clientSocketId returned to startListening's acceptCallback.
+     * @param {ArrayBuffer} data The data to send.
+     * @return {Promise|object} A Promise that resolves to information about the success or failure of the send attempt. 
+     */    
+    send(socketId, data){
+        return tcpSend(socketId, data);
     }
 
 }
@@ -55,11 +73,11 @@ function getIPv4NetworkInterfaces() {
     });
 }
 
-function tcpCreateAndListen(address, port, receiveCallback) {
+function tcpCreateAndListen(address, port, options) {
     return new Promise(function (resolve, reject) {
         tcpCreate()
             .then(function (socketId) {
-                tcpListen(socketId, address, port, receiveCallback)
+                tcpListen(socketId, address, port, options)
                     .then(function (listenData) {
                         resolve({ socketId, address, port: listenData.port });
                     });
@@ -85,11 +103,11 @@ function tcpGetSocketInfo(socketId) {
     });
 }
 
-function tcpListen(socketId, address, port, receiveCallback) {
+function tcpListen(socketId, address, port, options) {
     return new Promise(function (resolve, reject) {
         console.log(`tcpServer tcpListen() - address: ${address}, port: ${port}.`);
         chrome.sockets.tcpServer.listen(socketId, address, port, function (result) {
-            Promise.resolve(tcpListenHandler(result, socketId, port, receiveCallback))
+            Promise.resolve(tcpListenHandler(result, socketId, port, options))
                 .then(function (outPort) {
                     resolve({ port: outPort });
                 });
@@ -97,7 +115,7 @@ function tcpListen(socketId, address, port, receiveCallback) {
     });
 }
 
-function tcpListenHandler(result, socketId, port, receiveCallback) {
+function tcpListenHandler(result, socketId, port, options) {
     if (result < 0) {
         throw `tcpServer.js tcpListenHandler() - listen error result: ${result}.`;
     }
@@ -115,23 +133,39 @@ function tcpListenHandler(result, socketId, port, receiveCallback) {
             }
         })
         .then(function (outPort) {
-            tcpAddOnAcceptHandler(socketId, receiveCallback);
+            tcpAddOnAcceptHandler(socketId, options.acceptCallback, options.receiveCallback);
             return outPort;
         });
 }
 
-function tcpAddOnAcceptHandler(socketId, receiveCallback) {
+function tcpAddOnAcceptHandler(socketId, acceptCallback, receiveCallback) {
     chrome.sockets.tcpServer.onAccept.addListener(function (acceptInfo) {
+        console.log(`tcpServer.js tcpAddOnAcceptHandler().onAccept() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
         if (acceptInfo.socketId !== socketId) {
             return;
         }
+        
+        // TODO: FTP server must acknowledge the connection here.
+        if (acceptCallback) {
+            acceptCallback(acceptInfo);
+        }
 
-        chrome.sockets.tcp.onReceive.addListener(function (receiveInfo) {
-            if (receiveInfo.socketId === acceptInfo.clientSocketId) {
-                receiveCallback(receiveInfo.data);
+        chrome.sockets.tcp.onReceive.addListener(receiveInfo => {
+            console.log(`tcpServer.js tcpAddOnAcceptHandler().onReceive() - receiveInfo: ${JSON.stringify(receiveInfo) }.`);
+            if (receiveInfo.socketId === acceptInfo.clientSocketId && receiveCallback) {
+                receiveCallback({ clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
             }
         });
 
         chrome.sockets.tcp.setPaused(acceptInfo.clientSocketId, false);
+    });
+}
+
+function tcpSend(socketId, data) {
+    return new Promise(function (resolve, reject) {
+        console.log(`tcpServer.js tcpSend() - sending to ${socketId}.`);
+        chrome.sockets.tcp.send(socketId, data, sendInfo => {
+            resolve(sendInfo);
+        });
     });
 }
