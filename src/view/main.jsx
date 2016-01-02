@@ -54,14 +54,11 @@ function componentMounted(){
             self.setState({interfaces, selectedInterfaceIndex: 0}); 
         });
         
-    ftpServer.on("response-arrived", responseArrivedHandler, this);
+    ftpServer.on("command-arrived", responseArrivedHandler, this);
 }
 
-function responseArrivedHandler (responseBody){
-    var dataView = new DataView(responseBody);
-    var decoder = new TextDecoder("utf-8");
-    var decodedString = decoder.decode(dataView);
-    this.setState({ output: this.state.output + decodedString });
+function responseArrivedHandler (request){
+    this.setState({ output: this.state.output + request });
 }
 
 function interfaceSelected(evt){
