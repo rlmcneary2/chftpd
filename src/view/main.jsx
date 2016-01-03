@@ -1,14 +1,15 @@
 "use strict";
 
 
-var React = require("react");
 var ftpServer = require("../ftp/ftpServer");
+var React = require("react");
+var ServerConfiguration = require("../model/ServerConfiguration");
 
 
 module.exports = React.createClass({
     
     getInitialState(){
-        return { selectedInterfaceIndex: -1, ftpPort: "-", interfaces:null, output: "waiting..." };
+        return { selectedInterfaceIndex: -1, ftpPort: "-", interfaces: null, rootEntryName: "choose...", output: "waiting..." };
     },
     
     componentDidMount(){
@@ -37,6 +38,7 @@ module.exports = React.createClass({
                 <section>
                     <span>Available network interfaces</span>{select}
                     <p><span>port: {this.state.ftpPort}</span></p>
+                    <button onClick={selectRootDirectory.bind(this)}>Root</button><span> {this.state.rootEntryName}</span><br />
                     <button onClick={startServer.bind(this)}>Start</button>
                 </section>
                 <pre>{this.state.output}</pre>
@@ -47,8 +49,20 @@ module.exports = React.createClass({
 });
 
 
+var _serverConfiguration = null;
+
+
 function componentMounted(){
     var self = this;
+
+    _serverConfiguration = new ServerConfiguration();
+    _serverConfiguration.getRootEntryFullPath()
+        .then(function(path){
+            if (path){
+                self.setState({ rootEntryName: path });
+            }
+        });
+
     ftpServer.getNetworkInterfaces()
         .then(function(interfaces){
             self.setState({interfaces, selectedInterfaceIndex: 0}); 
@@ -67,6 +81,25 @@ function interfaceSelected(evt){
     }
 
     this.setState({selectedInterfaceIndex: evt.target.selectedIndex});
+}
+
+function selectRootDirectory() {
+    var self = this;
+    chrome.fileSystem.chooseEntry({type:"openDirectory"}, function(entry){
+        if (!entry){
+            return;
+        }
+
+        var id = chrome.fileSystem.retainEntry(entry);
+
+        _serverConfiguration.setRootEntryId(id)
+            .then(function(){
+                return _serverConfiguration.getRootEntryFullPath();
+            })
+            .then(function(path){
+                self.setState({ rootEntryName: path });
+            });
+    });
 }
 
 function startServer () {
