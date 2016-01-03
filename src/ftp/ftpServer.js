@@ -14,13 +14,34 @@ class FtpServer extends TcpServer{
     getControlPort() {
         return this.port;
     }
-    
-    setAllowAnonymousLogin(allow){
-        _allowAnonymousLogin = allow;
+
+    getPassword() {
+        return _password;
     }
-    
-    setWelcomeMessage(message) {
-        _welcomeMessage = message;
+
+    getUsername() {
+        return _username;
+    }
+
+    setAllowAnonymousLogin(allow) {
+        _allowAnonymousLogin = allow;
+        _username = allow ? "anonymous" : _username;
+    }
+
+    /**
+     * A message to display after the user successfully logs in.
+     * @param {string|string[]} message The message to display, Passing an array will cause more than one message line to be returned to the client. Do not include any FTP response codes in the message.
+     */    
+    setLoginMessage(message) {
+        _loginMessage = message;
+    }
+
+    setPassword(password) {
+        _password = password;
+    }
+
+    setUsername(username) {
+        _username = username;
     }
 
     /**
@@ -46,12 +67,17 @@ class FtpServer extends TcpServer{
 }
 
 
-var _socketState = {};
+const _WELCOME_MESSAGE = "Welcome to chftpd.";
+
+
 var _allowAnonymousLogin = true;
 var _commandHandler = new CommandHandler();
+var _loginMessage = "Logged in to chftpd.";
+var _password = null;
 var _sendEncoder = new TextEncoder("utf8");
+var _socketState = {};
 var _textDecoder = new TextDecoder("utf8");
-var _welcomeMessage = "Welcome to chftpd.";
+var _username = "anonymous";
 
 
 function acceptCallbackHandler(data) {
@@ -61,8 +87,10 @@ function acceptCallbackHandler(data) {
         lastRequestTime: Date.now()
     };
     
+    var response = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? "Anonymous login allowed; please end email as password." : ""}\r\n`;
+    
     // Create the FTP connection request ack ArrayBuffer.
-    var response = _sendEncoder.encode(`220 ${_welcomeMessage}\r\n`);
+    var response = _sendEncoder.encode(response);
     this.send(data.clientSocketId, response.buffer)
         .then(result => {
             console.log(`ftpServer.js acceptCallbackHandler().then() - ${JSON.stringify(result) }.`);
