@@ -86,7 +86,17 @@ var _supportedCommands = {
     pass(server, state, command, sendHandler) {
         console.log(`CommandHandler.js pass() - "${command.command}".`);
 
+        var loginMessage = server.getLoginMessage();
         var response = "230 User logged in, proceed.\r\n";
+        if (loginMessage) {
+            loginMessage = Array.isArray(loginMessage) ? loginMessage : [loginMessage];
+            response = "230-User logged in, proceed.\r\n";
+            for (var i = 0; i < loginMessage.length; i++) {
+                response += ("    " + loginMessage[i] + "\r\n");
+            }
+            response += "230 \r\n";
+        }
+
         if (state.lastCommand !== "USER") {
             // It's an error if USER is not the previous command received.
             response = "503 USER required first.\r\n";

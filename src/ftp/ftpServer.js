@@ -15,6 +15,10 @@ class FtpServer extends TcpServer{
         return this.port;
     }
 
+    getLoginMessage() {
+        return _loginMessage;
+    }
+
     getPassword() {
         return _password;
     }
@@ -72,7 +76,7 @@ const _WELCOME_MESSAGE = "Welcome to chftpd.";
 
 var _allowAnonymousLogin = true;
 var _commandHandler = new CommandHandler();
-var _loginMessage = "Logged in to chftpd.";
+var _loginMessage = ";-)";
 var _password = null;
 var _sendEncoder = new TextEncoder("utf8");
 var _socketState = {};
@@ -87,7 +91,7 @@ function acceptCallbackHandler(data) {
         lastRequestTime: Date.now()
     };
     
-    var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? "Anonymous login allowed; please end email as password." : ""}\r\n`;
+    var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? " Anonymous login allowed; please send email as password." : ""}\r\n`;
     
     // Create the FTP connection request ack ArrayBuffer.
     var response = _sendEncoder.encode(message);
