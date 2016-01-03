@@ -87,10 +87,10 @@ function acceptCallbackHandler(data) {
         lastRequestTime: Date.now()
     };
     
-    var response = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? "Anonymous login allowed; please end email as password." : ""}\r\n`;
+    var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? "Anonymous login allowed; please end email as password." : ""}\r\n`;
     
     // Create the FTP connection request ack ArrayBuffer.
-    var response = _sendEncoder.encode(response);
+    var response = _sendEncoder.encode(message);
     this.send(data.clientSocketId, response.buffer)
         .then(result => {
             console.log(`ftpServer.js acceptCallbackHandler().then() - ${JSON.stringify(result) }.`);

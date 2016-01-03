@@ -108,7 +108,7 @@ var _supportedCommands = {
         return Promise.resolve(sendHandler(response))
             .then(() => { return; });
     }
-}
+};
 
 
 function createCommandRequest(request) {
