@@ -1,6 +1,9 @@
 "use strict";
 
 
+var fileSystem = require("../fileSystem/fileSystem");
+
+
 class CommandHandler {
 
     /**
@@ -117,7 +120,41 @@ var _supportedCommands = {
 
         return Promise.resolve(sendHandler(response))
             .then(() => { return; });
+    },
+
+    pwd(server, state, command, sendHandler) {
+        console.log(`CommandHandler.js pwd() - "${command.command}".`);
+
+        debugger;
+        var entry = null;
+        var rootDisplay = null;
+        var rootEntry = null;
+        server.getRootDirectoryEntry()
+            .then(function (result) {
+                rootEntry = result;
+
+                var promise = null;
+                if (state.directoryEntryId) {
+                    promise = fileSystem.getFileSystemEntry(state.directoryEntryId);
+                } else {
+                    promise = rootEntry;
+                }
+
+                return Promise.resolve(promise);
+            })
+            .then(result => {
+                entry = result;
+                return fileSystem.getDisplayPath(rootEntry);
+            })
+            .then(result => {
+                rootDisplay = result;
+                return fileSystem.getDisplayPath(entry);
+            })
+            .then(entryDisplay => {
+                var pwd = entryDisplay.substring(rootDisplay.length);
+            });
     }
+
 };
 
 

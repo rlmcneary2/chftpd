@@ -56,7 +56,10 @@ function componentMounted(){
     var self = this;
 
     _serverConfiguration = new ServerConfiguration();
-    _serverConfiguration.getRootEntryFullPath()
+    ftpServer.getRootDirectoryEntry()
+        .then(function(entry){
+            return Promise.resolve(_serverConfiguration.getRootEntryFullPath(entry));
+        })
         .then(function(path){
             if (path){
                 self.setState({ rootEntryName: path });
@@ -92,9 +95,9 @@ function selectRootDirectory() {
 
         var id = chrome.fileSystem.retainEntry(entry);
 
-        _serverConfiguration.setRootEntryId(id)
+        ftpServer.setRootDirectoryEntryId(id)
             .then(function(){
-                return _serverConfiguration.getRootEntryFullPath();
+                return Promise.resolve(_serverConfiguration.getRootEntryFullPath(entry));
             })
             .then(function(path){
                 self.setState({ rootEntryName: path });

@@ -23,6 +23,55 @@ class FtpServer extends TcpServer{
         return _password;
     }
 
+    getRootDirectoryEntry() {
+        return new Promise(function (resolve, reject) {
+            if (_rootDirectoryEntry !== null) {
+                resolve(_rootDirectoryEntry);
+                return;
+            }
+
+            return getRootDirectoryEntryId()
+                .then(function (id) {
+                    if (!id) {
+                        resolve(null);
+                        return;
+                    }
+
+                    chrome.fileSystem.restoreEntry(id, function (entry) {
+                        var err = chrome.runtime.lastError;
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+
+                        _rootDirectoryEntry = entry ? entry : null;
+                        resolve(_rootDirectoryEntry);
+                    });
+                });
+        });
+    }
+
+    getRootDirectoryEntryFullPath() {
+        var self = this;
+        return new Promise(function (resolve) {
+            if (_rootDirectoryEntryFullPath !== null) {
+                resolve(_rootDirectoryEntryFullPath);
+                return;
+            }
+
+            self.getRootDirectoryEntry()
+                .then(function (entry) {
+                    if (!entry) {
+                        resolve(null);
+                        return;
+                    }
+                    chrome.fileSystem.getDisplayPath(entry, function (path) {
+                        resolve(path);
+                    });
+                });
+        });
+    }
+
     getUsername() {
         return _username;
     }
@@ -42,6 +91,36 @@ class FtpServer extends TcpServer{
 
     setPassword(password) {
         _password = password;
+    }
+
+    setRootDirectoryEntryId(id) {
+        return new Promise(function (resolve, reject) {
+            if (_rootDirectoryEntryId === id){
+                resolve();
+                return;
+            }
+
+            _rootDirectoryEntryId = id ? id : null;
+            _rootDirectoryEntry = null;
+            _rootDirectoryEntryFullPath = null;
+
+            if (_rootDirectoryEntryId === null) {
+                chrome.storage.local.remove("rootEntryId", function () {
+                    resolve();
+                    return;
+                });
+            } else {
+                chrome.storage.local.set({ rootEntryId: id }, function () {
+                    var err = chrome.runtime.lastError;
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+
+                    resolve();
+                });
+            }
+        });
     }
 
     setUsername(username) {
@@ -78,6 +157,9 @@ var _allowAnonymousLogin = true;
 var _commandHandler = new CommandHandler();
 var _loginMessage = ";-)";
 var _password = null;
+var _rootDirectoryEntry = null;
+var _rootDirectoryEntryId = null;
+var _rootDirectoryEntryFullPath = null;
 var _sendEncoder = new TextEncoder("utf8");
 var _socketState = {};
 var _textDecoder = new TextDecoder("utf8");
@@ -99,6 +181,29 @@ function acceptCallbackHandler(data) {
         .then(result => {
             console.log(`ftpServer.js acceptCallbackHandler().then() - ${JSON.stringify(result) }.`);
         });
+}
+
+function getRootDirectoryEntryId() {
+    return new Promise(function (resolve, reject) {
+        if (_rootDirectoryEntryId !== null) {
+            resolve(_rootDirectoryEntryId);
+            return;
+        }
+
+        chrome.storage.local.get("rootEntryId", function (items) {
+            var err = chrome.runtime.lastError;
+            if (err) {
+                reject(err);
+                return;
+            }
+
+            if (!items || !items.rootEntryId) {
+                resolve(null);
+            }
+
+            resolve(items.rootEntryId);
+        });
+    });
 }
 
 function receiveCallbackHandler(receiveInfo) {
