@@ -39,6 +39,7 @@ class CommandHandler {
                         .then(() => { return `"${command.command}" is not implemented.`; });
                 }
 
+                // Process the client's request using the function that has the same name as the command.
                 return Promise.resolve(_supportedCommands[handlerName](server, state, command, sendHandler));
             })
             .then(error => {
@@ -122,14 +123,16 @@ var _supportedCommands = {
             .then(() => { return; });
     },
 
+    /**
+     * Return an absolute path. The root is the server's current root directory.
+     */
     pwd(server, state, command, sendHandler) {
         console.log(`CommandHandler.js pwd() - "${command.command}".`);
 
-        debugger;
         var entry = null;
         var rootDisplay = null;
         var rootEntry = null;
-        server.getRootDirectoryEntry()
+        return server.getRootDirectoryEntry()
             .then(function (result) {
                 rootEntry = result;
 
@@ -151,8 +154,21 @@ var _supportedCommands = {
                 return fileSystem.getDisplayPath(entry);
             })
             .then(entryDisplay => {
-                var pwd = entryDisplay.substring(rootDisplay.length);
-            });
+                
+                //TODO: test this section.
+                
+                entryDisplay += "/"; // Works always?
+                var path = entryDisplay.substring(rootDisplay.length);
+                path = path.replace("\"", "\"\"");
+                path = path.replace("\u0012", "\u0000");
+                var response = `257 "${path}"\r\n`;
+                return Promise.resolve(sendHandler(response));
+            })
+            .then(() => { return; });
+    },
+    
+    xpwd(server, state, command, sendHandler){
+        return this.pwd(server, state, command, sendHandler);
     }
 
 };
