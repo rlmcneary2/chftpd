@@ -209,11 +209,12 @@ function getRootDirectoryEntryId() {
 function receiveCallbackHandler(receiveInfo) {
     var dataView = new DataView(receiveInfo.data);
     var request = _textDecoder.decode(dataView);
-    console.log(`ftpServer.js receiveCallbackHandler() - "${request}".`);
+    //console.log(`ftpServer.js receiveCallbackHandler() - "${request}".`);
 
     var state = _socketState[receiveInfo.clientSocketId];
 
     _commandHandler.handleRequest(this, state, request, message => {
+        console.log(`ftpServer.js receiveCallbackHandler() - response ${JSON.stringify(message)}.`);
         var encodedMessage = _sendEncoder.encode(message);
         return this.send(receiveInfo.clientSocketId, encodedMessage.buffer);
     })

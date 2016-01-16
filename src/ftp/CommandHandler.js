@@ -2,6 +2,7 @@
 
 
 var fileSystem = require("../fileSystem/fileSystem");
+var TcpServer = require("../tcp/TcpServer");
 
 
 class CommandHandler {
@@ -61,6 +62,31 @@ class CommandHandler {
 
 
 var _supportedCommands = {
+
+    cwd(server, state, command, sendHandler) {
+        console.log(`CommandHandler.js cwd() - "${command.command}".`);
+        
+        // Is the requested directory acessible?
+        var promise = [];
+        promise.push(Promise.resolve(server.getRootDirectoryEntry()));
+        if (state.directoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(state.directoryEntryId)));
+        }
+
+        return Promise.all(promise)
+            .then(([rootEntry, currentEntry]) => {
+                return fileSystem.getFileSystemEntryForPath (rootEntry, currentEntry || rootEntry, command.argument);
+            })
+            .then(entry=> {
+
+                // TODO: set the entry ID in state.
+                // TOOD: create a display path like in pwd and set it in the response.
+                
+                var response = "503 USER required first.\r\n";
+                return Promise.resolve(sendHandler(response));
+            })
+            .then(() => { return; });
+    },
 
     user(server, state, command, sendHandler) {
         console.log(`CommandHandler.js user() - "${command.command}".`);
@@ -122,6 +148,21 @@ var _supportedCommands = {
         return Promise.resolve(sendHandler(response))
             .then(() => { return; });
     },
+    
+    /**
+     * Server should enter passive mode.
+     */
+    pasv(server, state, command, sendHandler) {
+        console.log(`CommandHandler.js pasv() - "${command.command}".`);
+
+        // TODO: change this so that the server handles the creation of PASV accept and receive functionality.
+
+        return Promise.resolve(server.createPassiveHandler(state))
+            .then(result => {
+                var response = `227 Entering Passive Mode. ${result.address} ${result.port}\r\n`;
+                return Promise.resolve(sendHandler(response));
+            });
+    },
 
     /**
      * Return an absolute path. The root is the server's current root directory.
@@ -154,14 +195,18 @@ var _supportedCommands = {
                 return fileSystem.getDisplayPath(entry);
             })
             .then(entryDisplay => {
-                
-                //TODO: test this section.
-                
                 entryDisplay += "/"; // Works always?
                 var path = entryDisplay.substring(rootDisplay.length);
+                
+                // A single double quote character '"' should be replaced with two double quotes.
                 path = path.replace("\"", "\"\"");
+
+                // Replace "device control two" with null.
                 path = path.replace("\u0012", "\u0000");
+
+                // The path is surrounded by double quotes.
                 var response = `257 "${path}"\r\n`;
+
                 return Promise.resolve(sendHandler(response));
             })
             .then(() => { return; });

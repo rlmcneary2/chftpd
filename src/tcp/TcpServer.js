@@ -151,7 +151,7 @@ function tcpAddOnAcceptHandler(socketId, acceptCallback, receiveCallback) {
         }
 
         chrome.sockets.tcp.onReceive.addListener(receiveInfo => {
-            console.log(`tcpServer.js tcpAddOnAcceptHandler().onReceive() - receiveInfo: ${JSON.stringify(receiveInfo) }.`);
+            //console.log(`tcpServer.js tcpAddOnAcceptHandler().onReceive() - receiveInfo: ${JSON.stringify(receiveInfo) }.`);
             if (receiveInfo.socketId === acceptInfo.clientSocketId && receiveCallback) {
                 receiveCallback({ clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
             }
