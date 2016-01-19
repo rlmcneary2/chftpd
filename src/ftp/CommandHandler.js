@@ -67,25 +67,47 @@ var _supportedCommands = {
         console.log(`CommandHandler.js cwd() - "${command.command}".`);
         
         // Is the requested directory acessible?
-        var promise = [];
-        promise.push(Promise.resolve(server.getRootDirectoryEntry()));
+        var promise = [Promise.resolve(server.getRootDirectoryEntry())];
         if (state.directoryEntryId) {
             promise.push(Promise.resolve(fileSystem.getFileSystemEntry(state.directoryEntryId)));
         }
 
+        var rootEntry;
         return Promise.all(promise)
-            .then(([rootEntry, currentEntry]) => {
-                return fileSystem.getFileSystemEntryForPath (rootEntry, currentEntry || rootEntry, command.argument);
+            .then(results => {
+                rootEntry = results[0];
+                let currentEntry = results[1];
+                return Promise.resolve(fileSystem.getFileSystemEntryForPath(rootEntry, currentEntry || rootEntry, command.argument));
             })
-            .then(entry=> {
+            .then(changedEntry => {
+                if (!changedEntry) {
+                    return Promise.resolve(sendHandler("400\r\n"));
+                }
 
-                // TODO: set the entry ID in state.
-                // TOOD: create a display path like in pwd and set it in the response.
-                
-                var response = "503 USER required first.\r\n";
+                state.directoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
+
+                var path = changedEntry.fullPath.substring(rootEntry.fullPath.length);
+                if (path.length < 1) {
+                    path = "/";
+                }
+
+                path = escapePath(path);
+
+                var response = `250 directory changed to ${path}\r\n`;
                 return Promise.resolve(sendHandler(response));
             })
-            .then(() => { return; });
+            .then(() => {
+                return;
+            })
+            .catch(err => {
+                var response = "400";
+                if (typeof err === "object" && err.code){
+                    response = err.code;
+                }
+
+                response += "\r\n";
+                return Promise.resolve(sendHandler(response));
+            });
     },
 
     user(server, state, command, sendHandler) {
@@ -170,39 +192,24 @@ var _supportedCommands = {
     pwd(server, state, command, sendHandler) {
         console.log(`CommandHandler.js pwd() - "${command.command}".`);
 
-        var entry = null;
-        var rootDisplay = null;
+        var promises = [server.getRootDirectoryEntry()];
+        if (state.directoryEntryId) {
+            promises.push(fileSystem.getFileSystemEntry(state.directoryEntryId));
+        }
+
         var rootEntry = null;
-        return server.getRootDirectoryEntry()
-            .then(function (result) {
-                rootEntry = result;
+        var currentEntry = null;
+        return Promise.all(promises)
+            .then(function (results) {
+                rootEntry = results[0];
+                currentEntry = results[1] || results[0];
 
-                var promise = null;
-                if (state.directoryEntryId) {
-                    promise = fileSystem.getFileSystemEntry(state.directoryEntryId);
-                } else {
-                    promise = rootEntry;
+                var path = currentEntry.fullPath.substring(rootEntry.fullPath.length);
+                if (path.length < 1){
+                    path = "/";
                 }
-
-                return Promise.resolve(promise);
-            })
-            .then(result => {
-                entry = result;
-                return fileSystem.getDisplayPath(rootEntry);
-            })
-            .then(result => {
-                rootDisplay = result;
-                return fileSystem.getDisplayPath(entry);
-            })
-            .then(entryDisplay => {
-                entryDisplay += "/"; // Works always?
-                var path = entryDisplay.substring(rootDisplay.length);
                 
-                // A single double quote character '"' should be replaced with two double quotes.
-                path = path.replace("\"", "\"\"");
-
-                // Replace "device control two" with null.
-                path = path.replace("\u0012", "\u0000");
+                path = escapePath(path);
 
                 // The path is surrounded by double quotes.
                 var response = `257 "${path}"\r\n`;
@@ -212,11 +219,19 @@ var _supportedCommands = {
             .then(() => { return; });
     },
     
+    syst(server, state, command, sendHandler) {
+        return Promise.resolve(sendHandler("215 LINUX\r\n"))
+            .then(() => { return; });
+    },
+    
     xpwd(server, state, command, sendHandler){
         return this.pwd(server, state, command, sendHandler);
     }
 
 };
+
+
+module.exports = CommandHandler;
 
 
 function createCommandRequest(request) {
@@ -236,5 +251,10 @@ function createCommandRequest(request) {
     return result;
 }
 
+function escapePath(path) {
+    // A single double quote character '"' should be replaced with two double quotes.
+    var escapedPath = path.replace("\"", "\"\"");
 
-module.exports = CommandHandler;
+    // Replace "device control two" with null.
+    return escapedPath.replace("\u0012", "\u0000");
+}

@@ -39,13 +39,15 @@ module.exports = {
         var entry = path.startsWith("/") ? rootEntry : currentEntry;
         var self = this;
         return Promise.resolve(getDirectoryEntry(this, entry, path))
-            .then(([nextPath, nextEntry]) => {
+            .then(results => {
+                let nextPath = results[0];
+                let nextEntry = results[1];
                 if (!nextPath) {
                     return nextEntry;
                 }
                 
                 if (!nextPath.fullPath.startsWith (rootEntry.fullPath)){
-                    throw `fileSystem.js getFileSystemEntryForPath() - the root path "${rootEntry.fullPath}" does not contain the requested path "${nextPath.fullPath}".`
+                    throw { code: 550, message: `fileSystem.js getFileSystemEntryForPath() - the root path "${rootEntry.fullPath}" does not contain the requested path "${nextPath.fullPath}".` };
                 }
 
                 return self.getFileSystemEntryForPath(rootEntry, currentEntry, nextPath);
