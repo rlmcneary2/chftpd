@@ -2,7 +2,7 @@
 
 
 var fileSystem = require("../fileSystem/fileSystem");
-var TcpServer = require("../tcp/TcpServer");
+//var TcpServer = require("../tcp/TcpServer");
 
 
 class CommandHandler {
@@ -64,8 +64,6 @@ class CommandHandler {
 var _supportedCommands = {
 
     cwd(server, state, command, sendHandler) {
-        console.log(`CommandHandler.js cwd() - "${command.command}".`);
-        
         // Is the requested directory acessible?
         var promise = [Promise.resolve(server.getRootDirectoryEntry())];
         if (state.directoryEntryId) {
@@ -81,7 +79,7 @@ var _supportedCommands = {
             })
             .then(changedEntry => {
                 if (!changedEntry) {
-                    return Promise.resolve(sendHandler("400\r\n"));
+                    return Promise.resolve(sendHandler("400 \r\n"));
                 }
 
                 state.directoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
@@ -100,7 +98,7 @@ var _supportedCommands = {
                 return;
             })
             .catch(err => {
-                var response = "400";
+                var response = "400 ";
                 if (typeof err === "object" && err.code){
                     response = err.code;
                 }
@@ -111,8 +109,6 @@ var _supportedCommands = {
     },
 
     user(server, state, command, sendHandler) {
-        console.log(`CommandHandler.js user() - "${command.command}".`);
-
         var response = null;
         if (typeof state.lastCommand !== "undefined" && state.lastCommand !== null) {
             // It's an error if USER is not the first command received.
@@ -131,13 +127,10 @@ var _supportedCommands = {
             state.user = allowAnonymous ? server.getUsername() : command.argument;
         }
         
-        return Promise.resolve(sendHandler(response))
-            .then(() => { return; });
+        return Promise.resolve(sendHandler(response));
     },
 
     pass(server, state, command, sendHandler) {
-        console.log(`CommandHandler.js pass() - "${command.command}".`);
-
         var loginMessage = server.getLoginMessage();
         var response = "230 User logged in, proceed.\r\n";
         if (loginMessage) {
@@ -167,16 +160,13 @@ var _supportedCommands = {
             }
         }
 
-        return Promise.resolve(sendHandler(response))
-            .then(() => { return; });
+        return Promise.resolve(sendHandler(response));
     },
     
     /**
      * Server should enter passive mode.
      */
     pasv(server, state, command, sendHandler) {
-        console.log(`CommandHandler.js pasv() - "${command.command}".`);
-
         // TODO: change this so that the server handles the creation of PASV accept and receive functionality.
 
         return Promise.resolve(server.createPassiveHandler(state))
@@ -190,8 +180,6 @@ var _supportedCommands = {
      * Return an absolute path. The root is the server's current root directory.
      */
     pwd(server, state, command, sendHandler) {
-        console.log(`CommandHandler.js pwd() - "${command.command}".`);
-
         var promises = [server.getRootDirectoryEntry()];
         if (state.directoryEntryId) {
             promises.push(fileSystem.getFileSystemEntry(state.directoryEntryId));
@@ -215,13 +203,25 @@ var _supportedCommands = {
                 var response = `257 "${path}"\r\n`;
 
                 return Promise.resolve(sendHandler(response));
-            })
-            .then(() => { return; });
+            });
     },
     
     syst(server, state, command, sendHandler) {
-        return Promise.resolve(sendHandler("215 LINUX\r\n"))
-            .then(() => { return; });
+        return Promise.resolve(sendHandler("215 LINUX\r\n"));
+    },
+    
+    type(server, state, command, sendHandler) {
+        var status = "502 ";
+        var fileType = command.argument.toUpperCase();
+        switch (fileType) {
+            case "A":
+            case "I":
+                state.type = fileType;
+                status = "200 ";
+                break;
+        }
+
+        return Promise.resolve(sendHandler(`${status}\r\n`));
     },
     
     xpwd(server, state, command, sendHandler){
