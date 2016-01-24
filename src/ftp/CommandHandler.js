@@ -212,11 +212,11 @@ var _supportedCommands = {
     
     type(server, state, command, sendHandler) {
         var status = "502 ";
-        var fileType = command.argument.toUpperCase();
+        var fileTransferType = command.argument.toUpperCase();
         switch (fileType) {
             case "A":
             case "I":
-                state.type = fileType;
+                state.fileTransferType = fileTransferType;
                 status = "200 ";
                 break;
         }

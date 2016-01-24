@@ -170,7 +170,8 @@ function acceptCallbackHandler(data) {
     console.log(`ftpServer.js acceptCallbackHandler() - ${JSON.stringify(data) }.`);
 
     _socketState[data.clientSocketId] = {
-        lastRequestTime: Date.now()
+        lastRequestTime: Date.now(),
+        fileTransferType: "A" // Default to ASCII file type.
     };
     
     var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? " Anonymous login allowed; please send email as password." : ""}\r\n`;
@@ -209,12 +210,12 @@ function getRootDirectoryEntryId() {
 function receiveCallbackHandler(receiveInfo) {
     var dataView = new DataView(receiveInfo.data);
     var request = _textDecoder.decode(dataView);
-    //console.log(`ftpServer.js receiveCallbackHandler() - "${request}".`);
+    console.log(`ftpServer.js receiveCallbackHandler() - request [${request.trim()}]`);
 
     var state = _socketState[receiveInfo.clientSocketId];
 
     _commandHandler.handleRequest(this, state, request, message => {
-        console.log(`ftpServer.js receiveCallbackHandler() - response ${JSON.stringify(message)}.`);
+        console.log(`ftpServer.js receiveCallbackHandler() - response [${message.trim()}]`);
         var encodedMessage = _sendEncoder.encode(message);
         return this.send(receiveInfo.clientSocketId, encodedMessage.buffer);
     })
