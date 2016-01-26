@@ -126,8 +126,9 @@ var _supportedCommands = {
             response = `331 Anonymous login ${allowAnonymous ? "is" : "is not"} allowed.\r\n`;
             state.user = allowAnonymous ? server.getUsername() : command.argument;
         }
-        
-        return Promise.resolve(sendHandler(response));
+
+        return Promise.resolve(sendHandler(response))
+            .then(() => { return; }); // Return nothing here.
     },
 
     pass(server, state, command, sendHandler) {
@@ -167,11 +168,25 @@ var _supportedCommands = {
      * Server should enter passive mode.
      */
     pasv(server, state, command, sendHandler) {
-        // TODO: change this so that the server handles the creation of PASV accept and receive functionality.
+        // TODO: if the client has already made a PASV request close the
+        // existing port (stop any data flow first) and discard it. 
 
-        return Promise.resolve(server.createPassiveHandler(state))
+        // The server must open a port for data connections from the client and
+        // listen on this port - for a while. TBD how long to keep the port
+        // active.
+        return Promise.resolve(server.createPassiveDataHandler(state))
             .then(result => {
-                var response = `227 Entering Passive Mode. ${result.address} ${result.port}\r\n`;
+                console.log(`CommandHandler.js pasv() - result: "${JSON.stringify(result) }`);
+                // RFC 959 response.
+                const h = result.address.replace(".", ",");
+                
+                // Divide the port value by 256 and discard any fractional
+                // part, this is p1. Subtract p1 from the port value, this is
+                // p2.
+                const p1 = Math.trunc(result.port / 256);
+                const p2 = result.port - p1;
+
+                var response = `227 Entering Passive Mode. ${h},${p1},${p2}\r\n`;
                 return Promise.resolve(sendHandler(response));
             });
     },
@@ -213,10 +228,14 @@ var _supportedCommands = {
     type(server, state, command, sendHandler) {
         var status = "502 ";
         var fileTransferType = command.argument.toUpperCase();
-        switch (fileType) {
+        switch (fileTransferType) {
             case "A":
+                state.binaryFileTransfer = false;
+                status = "200 ";
+                break;
+
             case "I":
-                state.fileTransferType = fileTransferType;
+                state.binaryFileTransfer = true;
                 status = "200 ";
                 break;
         }
