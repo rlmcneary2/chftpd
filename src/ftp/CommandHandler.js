@@ -178,13 +178,13 @@ var _supportedCommands = {
             .then(result => {
                 console.log(`CommandHandler.js pasv() - result: "${JSON.stringify(result) }`);
                 // RFC 959 response.
-                const h = result.address.replace(".", ",");
+                const h = result.address.replace(/\./g, ",");
                 
                 // Divide the port value by 256 and discard any fractional
-                // part, this is p1. Subtract p1 from the port value, this is
-                // p2.
+                // part, this is p1. Subtract p1 * 256 from the port value,
+                // this is p2.
                 const p1 = Math.trunc(result.port / 256);
-                const p2 = result.port - p1;
+                const p2 = result.port - (p1 * 256);
 
                 var response = `227 Entering Passive Mode. ${h},${p1},${p2}\r\n`;
                 return Promise.resolve(sendHandler(response));

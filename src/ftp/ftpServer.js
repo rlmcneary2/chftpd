@@ -79,7 +79,7 @@ class FtpServer extends TcpServer{
     createPassiveDataHandler(state) {
         const passiveDataHandler = new TcpServer();
         state.passiveDataHandler = passiveDataHandler;
-        const superStartListening = passiveDataHandler.startListening;
+        const superStartListening = passiveDataHandler.startListening.bind(passiveDataHandler);
 
         passiveDataHandler.startListening = function (address) {
             return superStartListening(address, {
@@ -98,7 +98,8 @@ class FtpServer extends TcpServer{
 
         return Promise.resolve(passiveDataHandler.startListening(this.address))
             .then(result => {
-                return result;
+                state.passiveDataSocketInfo = result;
+                return { address: result.address, port: result.port };
             });
     }
 
