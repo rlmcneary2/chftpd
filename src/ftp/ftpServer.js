@@ -1,8 +1,9 @@
 "use strict";
 
 
-var TcpServer = require("../tcp/TcpServer");
 var CommandHandler = require("./CommandHandler");
+var DataConnection = require("./DataConnection");
+var TcpServer = require("../tcp/TcpServer");
 
 
 class FtpServer extends TcpServer{
@@ -76,27 +77,10 @@ class FtpServer extends TcpServer{
         return _username;
     }
 
-    createPassiveDataHandler(state) {
-        const passiveDataHandler = new TcpServer();
-        state.passiveDataHandler = passiveDataHandler;
-        const superStartListening = passiveDataHandler.startListening.bind(passiveDataHandler);
-
-        passiveDataHandler.startListening = function (address) {
-            return superStartListening(address, {
-
-                acceptCallback(data) {
-                    console.log(`ftpServer.js createPassiveDataHandler() - acceptCallback: ${JSON.stringify(data) }`);
-                },
-
-                receiveCallback(receiveInfo) {
-                    console.log(`ftpServer.js createPassiveDataHandler() - receiveCallback: ${JSON.stringify(receiveInfo) }`);
-                }
-
-            });
-
-        };
-
-        return Promise.resolve(passiveDataHandler.startListening(this.address))
+    createPassiveDataConnection(state) {
+        const passiveDataConnection = new DataConnection();
+        state.passiveDataHandler = passiveDataConnection;
+        return Promise.resolve(passiveDataConnection.startListening(this.address))
             .then(result => {
                 state.passiveDataSocketInfo = result;
                 return { address: result.address, port: result.port };

@@ -27,9 +27,6 @@ class TcpServer extends EventEmitter {
     startListening(address, options) {
         this.address = address;
         return tcpCreateAndListen(this.address, this.port, options);
-            // .then(function (results) {
-            //     return results;
-            // });
     }
 
     /**
@@ -149,11 +146,17 @@ function tcpAddOnAcceptHandler(socketId, acceptCallback, receiveCallback) {
         if (acceptCallback) {
             acceptCallback(acceptInfo);
         }
+        
+        // TODO: No callbacks, raise an event.
+        this.emit("accept", acceptInfo);
 
         chrome.sockets.tcp.onReceive.addListener(receiveInfo => {
             //console.log(`tcpServer.js tcpAddOnAcceptHandler().onReceive() - receiveInfo: ${JSON.stringify(receiveInfo) }.`);
             if (receiveInfo.socketId === acceptInfo.clientSocketId && receiveCallback) {
                 receiveCallback({ clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
+
+                // TODO: No callbacks, raise an event.
+                this.emit("receive", { clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
             }
         });
 

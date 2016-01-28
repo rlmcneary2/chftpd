@@ -174,7 +174,7 @@ var _supportedCommands = {
         // The server must open a port for data connections from the client and
         // listen on this port - for a while. TBD how long to keep the port
         // active.
-        return Promise.resolve(server.createPassiveDataHandler(state))
+        return Promise.resolve(server.createPassiveDataConnection(state))
             .then(result => {
                 console.log(`CommandHandler.js pasv() - result: "${JSON.stringify(result) }`);
                 // RFC 959 response.
