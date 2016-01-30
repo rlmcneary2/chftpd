@@ -2,6 +2,7 @@
 
 
 var CommandHandler = require("./CommandHandler");
+var logger = require("../logging/logger");
 var TcpServer = require("../tcp/TcpServer");
 
 
@@ -18,7 +19,7 @@ class DataConnection extends TcpServer {
     // Override base.
     startListening(address) {
         this.once("accept", evt => {
-            console.log(`DataConnection.js accept handler() - accept event: ${JSON.stringify(evt) }`);
+            logger.verbose(`DataConnection.js accept handler() - accept event: ${JSON.stringify(evt) }`);
         });
 
         this.on("receive", evt => {
