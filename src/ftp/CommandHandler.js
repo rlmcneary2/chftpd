@@ -2,7 +2,7 @@
 
 
 var fileSystem = require("../fileSystem/fileSystem");
-//var TcpServer = require("../tcp/TcpServer");
+var logger = require("../logging/logger");
 
 
 class CommandHandler {
@@ -33,7 +33,7 @@ class CommandHandler {
 
                 var handlerName = command.command.toLowerCase();
                 if (!_supportedCommands.hasOwnProperty(handlerName)) {
-                    console.log(`CommandHandler.js handleRequest() - "${command.command}" is not implemented.`);
+                    logger.warning(`CommandHandler.js handleRequest() - "${command.command}" is not implemented.`);
 
                     // Send not implemented error response to client.
                     return Promise.resolve(sendHandler("502 Command not implemented.\r\n"))
