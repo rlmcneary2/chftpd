@@ -145,17 +145,27 @@ class FtpServer extends TcpServer{
      */    
     startListening(address) {
         var self = this;
-        return super.startListening(address, {
-
-            acceptCallback(data) {
-                acceptCallbackHandler.call(self, data);
-            },
-
-            receiveCallback(receiveInfo) {
-                receiveCallbackHandler.call(self, receiveInfo);
-            }
-
+        this.on("accept", data => {
+            acceptCallbackHandler.call(self, data);
         });
+
+        this.on("receive", receiveInfo => {
+            receiveCallbackHandler.call(self, receiveInfo);
+        });
+
+        return super.startListening(address);
+
+        // return super.startListening(address, {
+
+        //     acceptCallback(data) {
+        //         acceptCallbackHandler.call(self, data);
+        //     },
+
+        //     receiveCallback(receiveInfo) {
+        //         receiveCallbackHandler.call(self, receiveInfo);
+        //     }
+
+        // });
     }
 
 }
