@@ -12,6 +12,23 @@ module.exports = {
         debug: 3,
         verbose: 4
     }),
+    
+    error() {
+        var err = arguments[0];
+        if (typeof err === "string") {
+            console.error(err);
+            return;
+        }
+
+        if (typeof err === "object") {
+            if (err.message) {
+                console.error(`${err.message}\r\n${JSON.stringify(err) }`);
+                return;
+            }
+        }
+
+        console.error(JSON.stringify(err));
+    },
 
     /**
      * Pass a string containing an informational message.

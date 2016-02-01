@@ -21,7 +21,7 @@ class CommandHandler {
         return Promise.resolve()
             .then(() => {
                 if (!command.valid) {
-                    console.log(`CommandHandler.js handleRequest() - "${command.command}" is not valid.`);
+                    logger.info(`CommandHandler.js handleRequest() - "${command.command}" is not valid.`);
             
                     // TODO send error response to client.
 
@@ -66,8 +66,8 @@ var _supportedCommands = {
     cwd(server, state, command, sendHandler) {
         // Is the requested directory acessible?
         var promise = [Promise.resolve(server.getRootDirectoryEntry())];
-        if (state.directoryEntryId) {
-            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(state.directoryEntryId)));
+        if (state.currentDirectoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId)));
         }
 
         var rootEntry;
@@ -82,7 +82,7 @@ var _supportedCommands = {
                     return Promise.resolve(sendHandler("400 \r\n"));
                 }
 
-                state.directoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
+                state.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
 
                 var path = changedEntry.fullPath.substring(rootEntry.fullPath.length);
                 if (path.length < 1) {
@@ -107,29 +107,41 @@ var _supportedCommands = {
                 return Promise.resolve(sendHandler(response));
             });
     },
-
-    user(server, state, command, sendHandler) {
-        var response = null;
-        if (typeof state.lastCommand !== "undefined" && state.lastCommand !== null) {
-            // It's an error if USER is not the first command received.
-            response = "503 USER required first.\r\n";
-        }
-
-        if (typeof state.user !== "undefined") {
-            // It's an error if USER has already been sent.
-            response = "503 already set.\r\n";
-        }
-
-        // Always allow login to proceed from user. If the username and / or password are incorrect an error is returned in pass().
-        if (response === null) {
-            var allowAnonymous = server.getAllowAnonymousLogin();
-            response = `331 Anonymous login ${allowAnonymous ? "is" : "is not"} allowed.\r\n`;
-            state.user = allowAnonymous ? server.getUsername() : command.argument;
-        }
-
+    
+    // feat(server, state, command, sendHandler){
+    //     let response = "211-\r\n MLSD\r\n211 \r\n";
+    //     return Promise.resolve(sendHandler(response));
+    // },
+    
+    list(server, state, command, sendHandler) {
+        let response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode connection\r\n`;
+        
+        // TODO: has the data connection expired? If so send an error response.
+        
         return Promise.resolve(sendHandler(response))
-            .then(() => { return; }); // Return nothing here.
+            .then(() => {
+                return state.dataConnection.list(server, state, command);
+            })
+            .then(result => {
+                // Close the data connection.
+                return state.dataConnection.close()
+                    .then(() => {
+                        logger.verbose("CommandHandler.js list() - data connection closed.");
+                        state.dataConnection = null;
+                        delete state.dataConnection;
+
+                        // Send the response provided by the result.
+                        return Promise.resolve(sendHandler(result));
+                    });
+            })
+            .catch(err => {
+                logger.error(err);
+            });
     },
+    
+    // mlsd(server, state, command, sendHandler){
+        
+    // },
 
     pass(server, state, command, sendHandler) {
         var loginMessage = server.getLoginMessage();
@@ -196,8 +208,8 @@ var _supportedCommands = {
      */
     pwd(server, state, command, sendHandler) {
         var promises = [server.getRootDirectoryEntry()];
-        if (state.directoryEntryId) {
-            promises.push(fileSystem.getFileSystemEntry(state.directoryEntryId));
+        if (state.currentDirectoryEntryId) {
+            promises.push(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId));
         }
 
         var rootEntry = null;
@@ -222,7 +234,9 @@ var _supportedCommands = {
     },
     
     syst(server, state, command, sendHandler) {
-        return Promise.resolve(sendHandler("215 LINUX\r\n"));
+        // Much like the http user-agent header SYST has become pointless.
+        // Return a supposedly meaningless server string.
+        return Promise.resolve(sendHandler("215 UNIX Type: L8\r\n"));
     },
     
     type(server, state, command, sendHandler) {
@@ -241,6 +255,29 @@ var _supportedCommands = {
         }
 
         return Promise.resolve(sendHandler(`${status}\r\n`));
+    },
+
+    user(server, state, command, sendHandler) {
+        var response = null;
+        if (typeof state.lastCommand !== "undefined" && state.lastCommand !== null) {
+            // It's an error if USER is not the first command received.
+            response = "503 USER required first.\r\n";
+        }
+
+        if (typeof state.user !== "undefined") {
+            // It's an error if USER has already been sent.
+            response = "503 already set.\r\n";
+        }
+
+        // Always allow login to proceed from user. If the username and / or password are incorrect an error is returned in pass().
+        if (response === null) {
+            var allowAnonymous = server.getAllowAnonymousLogin();
+            response = `331 Anonymous login ${allowAnonymous ? "is" : "is not"} allowed.\r\n`;
+            state.user = allowAnonymous ? server.getUsername() : command.argument;
+        }
+
+        return Promise.resolve(sendHandler(response))
+            .then(() => { return; }); // Return nothing here.
     },
     
     xpwd(server, state, command, sendHandler){

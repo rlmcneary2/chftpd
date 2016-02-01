@@ -11,6 +11,11 @@ class TcpServer extends EventEmitter {
         super();
         this.address = null;
         this.port = 0;
+        this.socketId;
+    }
+
+    close() {
+        return tcpClose.call(this, this.socketId);
     }
 
     getNetworkInterfaces() {
@@ -34,6 +39,7 @@ class TcpServer extends EventEmitter {
      * @return {Promise|object} A Promise that resolves to information about the success or failure of the send attempt. 
      */    
     send(socketId, data){
+        // TODO: now know the socketId ourselves, no need for the parameter here.
         return tcpSend(socketId, data);
     }
 
@@ -68,11 +74,21 @@ function getIPv4NetworkInterfaces() {
     });
 }
 
+function tcpClose(socketId) {
+    return new Promise((resolve) => {
+        chrome.sockets.tcpServer.close(socketId, () => {
+            logger.verbose(`TcpServer.js tcpClose() - socket ${socketId} closed.`);
+            resolve();
+        });
+    });
+}
+
 function tcpCreateAndListen(address, port) {
     var self = this;
     return new Promise(function (resolve, reject) {
         tcpCreate()
             .then(function (socketId) {
+                self.socketId = socketId;
                 tcpListen.call(self, socketId, address, port)
                     .then(function (listenData) {
                         resolve({ socketId, address, port: listenData.port });

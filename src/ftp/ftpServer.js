@@ -79,7 +79,10 @@ class FtpServer extends TcpServer{
 
     createPassiveDataConnection(state) {
         const passiveDataConnection = new DataConnection();
-        state.passiveDataHandler = passiveDataConnection;
+        passiveDataConnection.clientSocketId = state.clientSocketId;
+        passiveDataConnection.sendEncoder = _sendEncoder;
+        passiveDataConnection.textDecoder = _textDecoder;
+        state.dataConnection = passiveDataConnection;
         return Promise.resolve(passiveDataConnection.startListening(this.address))
             .then(result => {
                 state.passiveDataSocketInfo = result;
@@ -154,18 +157,6 @@ class FtpServer extends TcpServer{
         });
 
         return super.startListening(address);
-
-        // return super.startListening(address, {
-
-        //     acceptCallback(data) {
-        //         acceptCallbackHandler.call(self, data);
-        //     },
-
-        //     receiveCallback(receiveInfo) {
-        //         receiveCallbackHandler.call(self, receiveInfo);
-        //     }
-
-        // });
     }
 
 }
@@ -191,8 +182,9 @@ function acceptCallbackHandler(data) {
     console.log(`ftpServer.js acceptCallbackHandler() - ${JSON.stringify(data) }.`);
 
     _socketState[data.clientSocketId] = {
-        lastRequestTime: Date.now(),
-        binaryFileTransfer: true // Default to binary file type.
+        binaryFileTransfer: false, // Default to binary file type.
+        clientSocketId: data.clientSocketId,
+        lastRequestTime: Date.now()
     };
     
     var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? " Anonymous login allowed; please send email as password." : ""}\r\n`;
