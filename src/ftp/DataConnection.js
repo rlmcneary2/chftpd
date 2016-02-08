@@ -40,22 +40,32 @@ class DataConnection extends TcpServer {
             })
             .then(entries => {
                 // TODO: make a file system metadata request to get information about each entry such as the size etc.
-                
+                let promises = entries.map(entry => {
+                    return Promise.resolve(fileSystem.getMetadata(entry))
+                        .then(metaData => {
+                            return {entry, metaData};
+                        });
+                });
+
+                return Promise.all(promises);
+            })
+            .then(entryData => {
                 // If the command has an argument "-a" ignore it (always return all the entries).
                 // Convert to "EPLF" (hopefully all clients accept it?)
-                const lsEntries = entries.map(entry => {
-                    let fileSize = "         100"; // 10 chars
-                    let month = "Jan";
-                    let day = " 1"; // 2 chars
-                    let hour = "01";
-                    let minute = "01";
+                const lsEntries = entryData.map(entryDatum => {
+                    const entry = entryDatum.entry;
+                    const month = "Jan";
+                    const day = " 1"; // 2 chars
+                    const hour = "01";
+                    const minute = "01";
                     if (entry.isDirectory) {
                         //return `+/,\t${entry.name}\r\n`;
-                        fileSize = "           0"; // 10 chars
-                        return `drwxr-xr-x 1 owner group ${fileSize} ${month} ${day} ${hour}:${minute} ${entry.name}/\r\n`;
+                        return `dr-xr-xr-x    1 0        0                4096 ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
                     } else if (entry.isFile) {
                         //return `+r,\t${entry.name}\r\n`;
-                        return `-rw-r--r-- 1 owner group ${fileSize} ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
+                        const strFileSize = "" + entryDatum.metaData.size;
+                        const fileSize = " ".repeat(12 - strFileSize.length) + strFileSize; // 10 chars
+                        return `-rw-r--r--    1 0        0        ${fileSize} ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
                     }
                 });
                 

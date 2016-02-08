@@ -16,6 +16,20 @@ module.exports = {
         });
     },
 
+    getDirectoryEntries(entry) {
+        return new Promise((resolve, reject) => {
+            if (!entry.isDirectory) {
+                reject(`Entry ${entry.fullPath} is not a directory.`);
+            }
+
+            var reader = entry.createReader();
+            Promise.resolve(readAllDirectoryEntries(reader))
+                .then(entries => {
+                    resolve(entries);
+                });
+        });
+    },
+
     getFileSystemEntry(id) {
         return new Promise((resolve, reject) => {
             chrome.fileSystem.restoreEntry(id, function (entry) {
@@ -54,20 +68,16 @@ module.exports = {
             });
     },
 
-    getDirectoryEntries(entry) {
+    getMetadata(entry) {
         return new Promise((resolve, reject) => {
-            if (!entry.isDirectory) {
-                reject(`Entry ${entry.fullPath} is not a directory.`);
-            }
-
-            var reader = entry.createReader();
-            Promise.resolve(readAllDirectoryEntries(reader))
-                .then(entries => {
-                    resolve(entries);
-                });
+            entry.getMetadata(metaData=> {
+                resolve(metaData);
+            }, err => {
+                reject(err);
+            });
         });
     },
-    
+
     getParent(entry) {
         return new Promise(resolve => {
             entry.getParent(parent => {
