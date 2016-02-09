@@ -11,7 +11,7 @@ class TcpServer extends EventEmitter {
         super();
         this.address = null;
         this.port = 0;
-        this.socketId;
+        this.socketId = -1;
     }
 
     close() {
@@ -34,13 +34,13 @@ class TcpServer extends EventEmitter {
 
     /**
      * Send data to a client.
-     * @param {number} socketId The clientSocketId returned to startListening's acceptCallback.
+     * @param {number} clientSocketId The clientSocketId returned to startListening's acceptCallback.
      * @param {ArrayBuffer} data The data to send.
      * @return {Promise|object} A Promise that resolves to information about the success or failure of the send attempt. 
      */    
-    send(socketId, data){
+    send(clientSocketId, data){
         // TODO: now know the socketId ourselves, no need for the parameter here.
-        return tcpSend(socketId, data);
+        return tcpSend(clientSocketId, data);
     }
 
 }
@@ -90,8 +90,8 @@ function tcpCreateAndListen(address, port) {
             .then(function (socketId) {
                 self.socketId = socketId;
                 tcpListen.call(self, socketId, address, port)
-                    .then(function (listenData) {
-                        resolve({ socketId, address, port: listenData.port });
+                    .then(function () {
+                        resolve();
                     });
             });
     });
@@ -121,8 +121,8 @@ function tcpListen(socketId, address, port) {
         console.log(`tcpServer tcpListen() - address: ${address}, port: ${port}.`);
         chrome.sockets.tcpServer.listen(socketId, address, port, function (result) {
             Promise.resolve(tcpListenHandler.call(self, result, socketId, port))
-                .then(function (outPort) {
-                    resolve({ port: outPort });
+                .then(function () {
+                    resolve();
                 });
         });
     });
@@ -139,16 +139,17 @@ function tcpListenHandler(result, socketId, port) {
             if (port === 0) {
                 return tcpGetSocketInfo(socketId)
                     .then(function (socketInfo) {
-                        return socketInfo.localPort;
+                        self.port = socketInfo.localPort;
+                        return;
                     });
             }
             else {
-                return Promise.resolve(port);
+                return Promise.resolve();
             }
         })
-        .then(function (outPort) {
+        .then(function () {
             tcpAddOnAcceptHandler.call(self, socketId);
-            return outPort;
+            return;
         });
 }
 
@@ -160,7 +161,7 @@ function tcpAddOnAcceptHandler(socketId) {
             return;
         }
 
-        logger.info(`tcpServer.js tcpAddOnAcceptHandler().onAccept() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
+        logger.verbose(`tcpServer.js tcpAddOnAcceptHandler().onAccept() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
         
         self.emit("accept", acceptInfo);
 
@@ -175,10 +176,10 @@ function tcpAddOnAcceptHandler(socketId) {
     });
 }
 
-function tcpSend(socketId, data) {
+function tcpSend(clientSocketId, data) {
     return new Promise(function (resolve, reject) {
-        console.log(`tcpServer.js tcpSend() - sending to ${socketId}.`);
-        chrome.sockets.tcp.send(socketId, data, sendInfo => {
+        console.log(`tcpServer.js tcpSend() - sending to client socket ID ${clientSocketId}.`);
+        chrome.sockets.tcp.send(clientSocketId, data, sendInfo => {
             resolve(sendInfo);
         });
     });

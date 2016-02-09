@@ -13,8 +13,8 @@ class DataConnection extends TcpServer {
 
     constructor() {
         super();
-
         this._clientSocketId;
+        this._accepted = null; // will be a promise
         this._sendEncoder;
         this._textDecoder;
     }
@@ -22,7 +22,7 @@ class DataConnection extends TcpServer {
     set clientSocketId(id) {
         this._clientSocketId = id;
     }
-
+    
     set sendEncoder(encoder) {
         this._sendEncoder = encoder;
     }
@@ -31,9 +31,23 @@ class DataConnection extends TcpServer {
         this._textDecoder = decoder;
     }
 
-    list(server, state, command) {
-        // Get the current directory.
-        return Promise.resolve(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId))
+    list(server, state, command, acceptedCallback) {
+        return Promise.resolve(this._accepted)
+            .then(() => {
+                logger.verbose(`DataConnection.list() - accepted a connection from the client.`);
+                var p = null;
+                if (acceptedCallback) {
+                    logger.verbose(`DataConnection.list() - invoking acceptedCallback.`);
+                    p = acceptedCallback();
+                }
+
+                return Promise.resolve(p);
+            })
+            .then(() => {
+                logger.verbose(`DataConnection.list() - acceptedCallback resolved.`);
+                // Get the current directory.
+                return Promise.resolve(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId));
+            })
             .then(currentDirectory => {
                 // Get a list of files and directories.
                 return Promise.resolve(fileSystem.getDirectoryEntries(currentDirectory));
@@ -50,22 +64,27 @@ class DataConnection extends TcpServer {
                 return Promise.all(promises);
             })
             .then(entryData => {
+                let fileSize = 4;
+                entryData.forEach(entryDatum => {
+                    fileSize = fileSize < entryDatum.metaData.size ? entryDatum.metaData.size : fileSize;
+                });
+
+                const fileSizeLength = ("" + fileSize).length;
+
                 // If the command has an argument "-a" ignore it (always return all the entries).
                 // Convert to "EPLF" (hopefully all clients accept it?)
                 const lsEntries = entryData.map(entryDatum => {
                     const entry = entryDatum.entry;
                     const month = "Jan";
-                    const day = " 1"; // 2 chars
+                    const day = createField(1, 2, false); // 2 chars
                     const hour = "01";
                     const minute = "01";
                     if (entry.isDirectory) {
                         //return `+/,\t${entry.name}\r\n`;
-                        return `dr-xr-xr-x    1 0        0                4096 ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
+                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
                     } else if (entry.isFile) {
                         //return `+r,\t${entry.name}\r\n`;
-                        const strFileSize = "" + entryDatum.metaData.size;
-                        const fileSize = " ".repeat(12 - strFileSize.length) + strFileSize; // 10 chars
-                        return `-rw-r--r--    1 0        0        ${fileSize} ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
+                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
                     }
                 });
                 
@@ -80,14 +99,19 @@ class DataConnection extends TcpServer {
 
     // Override base.
     startListening(address) {
-        this.once("accept", evt => {
-            logger.verbose(`DataConnection.js accept handler() - accept event: ${JSON.stringify(evt) }`);
+        const self = this;
+        this._accepted = new Promise(resolve => {
+            self.once("accept", evt => {
+                logger.info(`DataConnection.js accept handler() - accept event: ${JSON.stringify(evt) }, address: ${self.address}:${self.port}`);
+                self.clientSocketId = evt.clientSocketId;
+                resolve();
+            });
         });
 
         this.on("receive", evt => {
-            if (this._textDecoder) {
+            if (self._textDecoder) {
                 const dataView = new DataView(evt.data);
-                const request = this._textDecoder.decode(dataView);
+                const request = self._textDecoder.decode(dataView);
                 logger.info(`DataConnection.js receive handler() - request [${request.trim() }]`);
             }
         });
@@ -100,6 +124,23 @@ class DataConnection extends TcpServer {
 
 module.exports = DataConnection;
 
+
+/**
+ * Create a text string with specific padding.
+ * @param {any} value Any value that can be converted to a string.
+ * @param {number} length The length of the output string in characters.
+ * @param {boolean} [leftAlignValue=true] If true the value will be aligned to the left side of the string.
+ * @returns {string} A string with the length requested.
+ */
+function createField(value, length, leftAlignValue) {
+    const lav = typeof leftAlignValue !== "boolean" ? true : leftAlignValue;
+    const field = Array(length).join(" ");
+    if (lav) {
+        return (value + field).substring(0, length);
+    } else {
+        return (field + value).slice(-length);
+    }
+}
 
 function send(message) {
     logger.verbose(`DataConnection.js send() - message [${message.trim()}]`);

@@ -115,10 +115,10 @@ function startServer () {
     var address = this.state.interfaces[this.state.selectedInterfaceIndex].address;
     var self = this;
     Promise.resolve(ftpServer.startListening(address))
-        .then(function(result){
+        .then(function(){
             var message = self.state.output;
-            message += `address: ${result.address}:${result.port}\r\n`;
-            self.setState({ ftpPort: result.port, output: message });
+            message += `address: ${ftpServer.address}:${ftpServer.port}\r\n`;
+            self.setState({ ftpPort: ftpServer.port, output: message });
         })
         .catch(function(err){
             console.error(`ftpServer error: ${err}.`);

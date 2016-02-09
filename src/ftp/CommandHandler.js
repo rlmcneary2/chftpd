@@ -114,19 +114,25 @@ var _supportedCommands = {
     // },
     
     list(server, state, command, sendHandler) {
-        let response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode connection\r\n`;
         
         // TODO: has the data connection expired? If so send an error response.
-        
-        return Promise.resolve(sendHandler(response))
-            .then(() => {
-                return state.dataConnection.list(server, state, command);
-            })
+
+        // Invoke the DataConnection list function. The function has a fourth
+        // parameter for a callback. This callback is invoked after the client
+        // has connected to this server. The callback returns a promise that
+        // the DataConnection waits to resolve before it sends the data over
+        // the connection.
+        return Promise.resolve(state.dataConnection.list(server, state, command, () => {
+            logger.verbose(`CommandHandler.list() - acceptedCallback, sending response.`);
+            const response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode connection\r\n`;
+            return Promise.resolve(sendHandler(response));
+        }))
             .then(result => {
+                logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
                 // Close the data connection.
                 return state.dataConnection.close()
                     .then(() => {
-                        logger.verbose("CommandHandler.js list() - data connection closed.");
+                        logger.verbose("CommandHandler.list() - data connection closed.");
                         state.dataConnection = null;
                         delete state.dataConnection;
 
@@ -187,16 +193,17 @@ var _supportedCommands = {
         // listen on this port - for a while. TBD how long to keep the port
         // active.
         return Promise.resolve(server.createPassiveDataConnection(state))
-            .then(result => {
-                console.log(`CommandHandler.js pasv() - result: "${JSON.stringify(result) }`);
+            .then(() => {
+                console.log(`CommandHandler.js pasv() - createPassiveDataConnection resolved.`);
+                const dataConnection = state.dataConnection;
                 // RFC 959 response.
-                const h = result.address.replace(/\./g, ",");
+                const h = dataConnection.address.replace(/\./g, ",");
                 
                 // Divide the port value by 256 and discard any fractional
                 // part, this is p1. Subtract p1 * 256 from the port value,
                 // this is p2.
-                const p1 = Math.trunc(result.port / 256);
-                const p2 = result.port - (p1 * 256);
+                const p1 = Math.trunc(dataConnection.port / 256);
+                const p2 = dataConnection.port - (p1 * 256);
 
                 var response = `227 Entering Passive Mode. ${h},${p1},${p2}\r\n`;
                 return Promise.resolve(sendHandler(response));

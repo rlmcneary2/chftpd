@@ -7,6 +7,10 @@ var TcpServer = require("../tcp/TcpServer");
 
 
 class FtpServer extends TcpServer{
+    
+    constructor(){
+        super();
+    }
 
     getAllowAnonymousLogin() {
         return _allowAnonymousLogin;
@@ -79,15 +83,10 @@ class FtpServer extends TcpServer{
 
     createPassiveDataConnection(state) {
         const passiveDataConnection = new DataConnection();
-        passiveDataConnection.clientSocketId = state.clientSocketId;
         passiveDataConnection.sendEncoder = _sendEncoder;
         passiveDataConnection.textDecoder = _textDecoder;
         state.dataConnection = passiveDataConnection;
-        return Promise.resolve(passiveDataConnection.startListening(this.address))
-            .then(result => {
-                state.passiveDataSocketInfo = result;
-                return { address: result.address, port: result.port };
-            });
+        return Promise.resolve(passiveDataConnection.startListening(this.address));
     }
 
     setAllowAnonymousLogin(allow) {
