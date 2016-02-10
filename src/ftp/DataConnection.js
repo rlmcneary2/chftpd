@@ -81,16 +81,16 @@ class DataConnection extends TcpServer {
                     const minute = "01";
                     if (entry.isDirectory) {
                         //return `+/,\t${entry.name}\r\n`;
-                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
+                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}`;
                     } else if (entry.isFile) {
                         //return `+r,\t${entry.name}\r\n`;
-                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}\r\n`;
+                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}`;
                     }
                 });
                 
                 // Join the strings. Send the response.
-                const message = lsEntries.join("");
-                return send.call(this, message);
+                const message = lsEntries.join("\r\n") + "\r\n";
+                return send.call(this, state.binaryFileTransfer, message);
             })
             .then(() => {
                 return "226 Transfer complete\r\n";
@@ -142,11 +142,22 @@ function createField(value, length, leftAlignValue) {
     }
 }
 
-function send(message) {
-    logger.verbose(`DataConnection.js send() - message [${message.trim()}]`);
-    const response = this._sendEncoder.encode(message);
-    return Promise.resolve(this.send(this._clientSocketId, response.buffer))
+function send(binaryFileTransfer, message) {
+    logger.verbose(`DataConnection.js send() - message [${message.trim() }]`);
+    
+    // TODO: refactor - shared with ftpServer.
+    let encodedMessage = null;
+    if (binaryFileTransfer) {
+        encodedMessage = this._sendEncoder.encode(message);
+    } else {
+        encodedMessage = new Int8Array(message.length);
+        for (let i = 0; i < message.length; i++) {
+            encodedMessage[i] = message.charCodeAt(i);
+        }
+    }
+
+    return Promise.resolve(this.send(this._clientSocketId, encodedMessage.buffer))
         .then(result => {
-            logger.verbose(`DataConnection.js send() - result [${JSON.stringify(result)}].`);
+            logger.verbose(`DataConnection.js send() - result [${JSON.stringify(result) }].`);
         });
 }

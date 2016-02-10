@@ -228,7 +228,18 @@ function receiveCallbackHandler(receiveInfo) {
 
     _commandHandler.handleRequest(this, state, request, message => {
         console.log(`ftpServer.js receiveCallbackHandler() - response [${message.trim()}]`);
-        var encodedMessage = _sendEncoder.encode(message);
+        
+        // TODO: refactor - shared with DataConnection.
+        let encodedMessage = null;
+        if (state.binaryFileTransfer) {
+            encodedMessage = _sendEncoder.encode(message);
+        } else {
+            encodedMessage = new Int8Array(message.length);
+            for (let i = 0; i < message.length; i++){
+                encodedMessage[i] = message.charCodeAt(i);
+            }
+        }
+
         return this.send(receiveInfo.clientSocketId, encodedMessage.buffer);
     })
         .then(result => {
