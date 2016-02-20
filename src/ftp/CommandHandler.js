@@ -117,31 +117,33 @@ var _supportedCommands = {
         
         // TODO: has the data connection expired? If so send an error response.
 
+        const response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        sendHandler(response);
+
         // Invoke the DataConnection list function. The function has a fourth
         // parameter for a callback. This callback is invoked after the client
         // has connected to this server. The callback returns a promise that
         // the DataConnection waits to resolve before it sends the data over
         // the connection.
-        return Promise.resolve(state.dataConnection.list(server, state, command, () => {
-            logger.verbose(`CommandHandler.list() - acceptedCallback, sending response.`);
-            const response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode connection\r\n`;
-            return Promise.resolve(sendHandler(response));
-        }))
-            .then(result => {
+        return Promise.resolve(state.dataConnection.list(server, state, command))
+            .then(response => {
                 logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
-                // Close the data connection.
-                return state.dataConnection.close()
-                    .then(() => {
-                        logger.verbose("CommandHandler.list() - data connection closed.");
-                        state.dataConnection = null;
-                        delete state.dataConnection;
-
-                        // Send the response provided by the result.
-                        return Promise.resolve(sendHandler(result));
-                    });
+                return sendHandler(response);
+            })
+            .then(() => {
+                return Promise.resolve(state.dataConnection.close());
+            })
+            .then(() => {
+                logger.verbose("CommandHandler.list() - data connection closed.");
+                state.dataConnection = null;
+                delete state.dataConnection;
             })
             .catch(err => {
                 logger.error(err);
+                if (state && state.dataConnection) {
+                    state.dataConnection = null;
+                    delete state.dataConnection;
+                }
             });
     },
     
@@ -205,7 +207,7 @@ var _supportedCommands = {
                 const p1 = Math.trunc(dataConnection.port / 256);
                 const p2 = dataConnection.port - (p1 * 256);
 
-                var response = `227 Entering Passive Mode. ${h},${p1},${p2}\r\n`;
+                var response = `227 Entering Passive Mode. (${h},${p1},${p2})\r\n`;
                 return Promise.resolve(sendHandler(response));
             });
     },

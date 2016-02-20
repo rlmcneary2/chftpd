@@ -9,13 +9,39 @@ class TcpServer extends EventEmitter {
 
     constructor() {
         super();
+        this._clientSocketIds = new Map();
         this.address = null;
         this.port = 0;
         this.socketId = -1;
+
+        this.acceptHandler = function(acceptInfo) {
+            logger.verbose(`TcpServer.acceptHandler() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
+            if (acceptInfo.socketId !== this.socketId) {
+                return;
+            }
+
+            this._clientSocketIds.set(acceptInfo.clientSocketId, acceptInfo);
+            //this.emit("accept", acceptInfo);
+            this.emit("accept", { clientSocketId: acceptInfo.clientSocketId });
+            chrome.sockets.tcp.setPaused(acceptInfo.clientSocketId, false);
+        }.bind(this);
+
+        this.receiveHandler = function(receiveInfo) {
+            logger.verbose(`TcpServer.receiveHandler() - receiveInfo: ${JSON.stringify(receiveInfo)}.`);
+            if (!this._clientSocketIds.has(receiveInfo.socketId)) {
+                return;
+            }
+
+            this.emit("receive", { clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
+        }.bind(this);
     }
 
     close() {
-        return tcpClose.call(this, this.socketId);
+        var self = this;
+        return tcpClose.call(this)
+            .then(() => {
+                self._clientSocketIds.clear();
+            });
     }
 
     getNetworkInterfaces() {
@@ -74,10 +100,14 @@ function getIPv4NetworkInterfaces() {
     });
 }
 
-function tcpClose(socketId) {
+function tcpClose() {
+    var self = this;
     return new Promise((resolve) => {
-        chrome.sockets.tcpServer.close(socketId, () => {
-            logger.verbose(`TcpServer.js tcpClose() - socket ${socketId} closed.`);
+        logger.verbose(`TcpServer.js tcpClose() - removing listeners for socket ${self.socketId}.`);
+        chrome.sockets.tcpServer.onAccept.removeListener(self.acceptHandler);
+        chrome.sockets.tcp.onReceive.removeListener(self.receiveHandler);
+        chrome.sockets.tcpServer.close(self.socketId, () => {
+            logger.verbose(`TcpServer.js tcpClose() - socket ${self.socketId} closed.`);
             resolve();
         });
     });
@@ -147,33 +177,11 @@ function tcpListenHandler(result, socketId, port) {
                 return Promise.resolve();
             }
         })
-        .then(function () {
-            tcpAddOnAcceptHandler.call(self, socketId);
+        .then(function() {
+            chrome.sockets.tcpServer.onAccept.addListener(self.acceptHandler);
+            chrome.sockets.tcp.onReceive.addListener(self.receiveHandler);
             return;
         });
-}
-
-function tcpAddOnAcceptHandler(socketId) {
-    var self = this;
-    chrome.sockets.tcpServer.onAccept.addListener(function (acceptInfo) {
-        logger.verbose(`tcpServer.js tcpAddOnAcceptHandler().onAccept() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
-        if (acceptInfo.socketId !== socketId) {
-            return;
-        }
-
-        logger.verbose(`tcpServer.js tcpAddOnAcceptHandler().onAccept() - acceptInfo: ${JSON.stringify(acceptInfo)}.`);
-        
-        self.emit("accept", acceptInfo);
-
-        chrome.sockets.tcp.onReceive.addListener(receiveInfo => {
-            //console.log(`tcpServer.js tcpAddOnAcceptHandler().onReceive() - receiveInfo: ${JSON.stringify(receiveInfo) }.`);
-            if (receiveInfo.socketId === acceptInfo.clientSocketId) {
-                self.emit("receive", { clientSocketId: receiveInfo.socketId, data: receiveInfo.data });
-            }
-        });
-
-        chrome.sockets.tcp.setPaused(acceptInfo.clientSocketId, false);
-    });
 }
 
 function tcpSend(clientSocketId, data) {
