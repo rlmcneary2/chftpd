@@ -196,7 +196,6 @@ var _supportedCommands = {
         // active.
         return Promise.resolve(server.createPassiveDataConnection(state))
             .then(() => {
-                console.log(`CommandHandler.js pasv() - createPassiveDataConnection resolved.`);
                 const dataConnection = state.dataConnection;
                 // RFC 959 response.
                 const h = dataConnection.address.replace(/\./g, ",");

@@ -3,6 +3,7 @@
 
 var CommandHandler = require("./CommandHandler");
 var DataConnection = require("./DataConnection");
+var log = require("../logging/logger");
 var TcpServer = require("../tcp/TcpServer");
 
 
@@ -10,6 +11,35 @@ class FtpServer extends TcpServer{
     
     constructor(){
         super();
+        this.name = "FtpServer";
+        this.port = 21;
+    }
+    
+    close() {
+        _socketState.forEach((val, key) => {
+            let connection = this.getConnection(key);
+            if (!connection) {
+                return;
+            }
+
+            connection.removeListener("receive", val.receiveHandler);
+        });
+        
+        _socketState.clear();
+
+        super.close();
+    }
+
+    createPassiveDataConnection(state) {
+        log.verbose("ftpServer.createPassiveDataConnection() - start.");
+        const passiveDataConnection = new DataConnection();
+        passiveDataConnection.sendEncoder = _sendEncoder;
+        passiveDataConnection.textDecoder = _textDecoder;
+        state.dataConnection = passiveDataConnection;
+        return Promise.resolve(passiveDataConnection.listen(this.address))
+            .then(() => {
+                log.verbose("ftpServer.createPassiveDataConnection() - finish.");
+            });
     }
 
     getAllowAnonymousLogin() {
@@ -81,12 +111,32 @@ class FtpServer extends TcpServer{
         return _username;
     }
 
-    createPassiveDataConnection(state) {
-        const passiveDataConnection = new DataConnection();
-        passiveDataConnection.sendEncoder = _sendEncoder;
-        passiveDataConnection.textDecoder = _textDecoder;
-        state.dataConnection = passiveDataConnection;
-        return Promise.resolve(passiveDataConnection.startListening(this.address));
+    /**
+     * Start listening for FTP connections from clients.
+     * @param {string} address The address to bind to.
+     * @returns {Promise|object} A Promise that resolves to an object with information.
+     */    
+    listen(address) {
+        var self = this;
+        this.addListener("accept", data => {
+            onAcceptEvent.call(self, data);
+        });
+
+        return super.listen(address);
+    }
+
+    send(clientSocketId, message) {
+        let connection = this.getConnection(clientSocketId);
+        if (!connection) {
+            log.warning(`ftpServer.send - no connection for client socket ${clientSocketId}.`);
+            return;
+        }
+
+        let response = _sendEncoder.encode(message);
+        return connection.send(clientSocketId, response.buffer)
+            .then(result => {
+                log.verbose(`ftpServer.send - result: ${JSON.stringify(result)}.`);
+            });
     }
 
     setAllowAnonymousLogin(allow) {
@@ -139,25 +189,6 @@ class FtpServer extends TcpServer{
     setUsername(username) {
         _username = username;
     }
-
-    /**
-     * Start listening for FTP connections from clients.
-     * @param {string} address The address to bind to.
-     * @returns {Promise|object} A Promise that resolves to an object with information.
-     */    
-    startListening(address) {
-        var self = this;
-        this.on("accept", data => {
-            acceptCallbackHandler.call(self, data);
-        });
-
-        this.on("receive", receiveInfo => {
-            receiveCallbackHandler.call(self, receiveInfo);
-        });
-
-        return super.startListening(address);
-    }
-
 }
 
 
@@ -172,28 +203,33 @@ var _rootDirectoryEntry = null;
 var _rootDirectoryEntryId = null;
 var _rootDirectoryEntryFullPath = null;
 var _sendEncoder = new TextEncoder("utf8");
-var _socketState = {};
+var _socketState = new Map();
 var _textDecoder = new TextDecoder("utf8");
 var _username = "anonymous";
 
 
-function acceptCallbackHandler(data) {
-    console.log(`ftpServer.js acceptCallbackHandler() - ${JSON.stringify(data) }.`);
-
-    _socketState[data.clientSocketId] = {
+function onAcceptEvent(data) {
+    log.info(`ftpServer onAcceptEvent() - ${JSON.stringify(data)}.`);
+    
+    var socketState = {
         binaryFileTransfer: false, // Default to binary file type.
         clientSocketId: data.clientSocketId,
-        lastRequestTime: Date.now()
+        lastRequestTime: Date.now(),
+        receiveHandler: function(info) { onReceiveEvent(info); }.bind(this)
     };
-    
+
+    _socketState.set(data.clientSocketId, socketState);
+
+    let connection = this.getConnection(data.clientSocketId);
+    if (connection) {
+        connection.addListener("receive", socketState.receiveHandler);
+    }
+
     var message = `220 ${_WELCOME_MESSAGE}${this.getAllowAnonymousLogin() ? " Anonymous login allowed; please send email as password." : ""}\r\n`;
-    
+
     // Create the FTP connection request ack ArrayBuffer.
     var response = _sendEncoder.encode(message);
-    this.send(data.clientSocketId, response.buffer)
-        .then(result => {
-            console.log(`ftpServer.js acceptCallbackHandler().then() - ${JSON.stringify(result) }.`);
-        });
+    this.send(data.clientSocketId, response.buffer);
 }
 
 function getRootDirectoryEntryId() {
@@ -219,15 +255,21 @@ function getRootDirectoryEntryId() {
     });
 }
 
-function receiveCallbackHandler(receiveInfo) {
+function onReceiveEvent(receiveInfo) {
+    log.verbose(`ftpServer.js onReceiveEvent() - receiveInfo: [${JSON.stringify(receiveInfo)}]`);
     var dataView = new DataView(receiveInfo.data);
     var request = _textDecoder.decode(dataView);
-    console.log(`ftpServer.js receiveCallbackHandler() - request [${request.trim()}]`);
+    log.info(`ftpServer.js onReceiveEvent() - request [${request.trim()}]`);
+    
+    if (!_socketState.has(receiveInfo.clientSocketId)){
+        log.warning(`ftpServer onReceiveEvent - no client socket ${receiveInfo.clientSocketId} exists.`);
+        return;
+    }
 
-    var state = _socketState[receiveInfo.clientSocketId];
+    var state = _socketState.get(receiveInfo.clientSocketId);
 
     _commandHandler.handleRequest(this, state, request, message => {
-        console.log(`ftpServer.js receiveCallbackHandler() - response [${message.trim()}]`);
+        log.info(`ftpServer.js onReceiveEvent() - response: [${message.trim()}]`);
         
         // TODO: refactor - shared with DataConnection.
         let encodedMessage = null;

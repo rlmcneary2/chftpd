@@ -114,7 +114,7 @@ function startServer () {
     
     var address = this.state.interfaces[this.state.selectedInterfaceIndex].address;
     var self = this;
-    Promise.resolve(ftpServer.startListening(address))
+    Promise.resolve(ftpServer.listen(address))
         .then(function(){
             var message = self.state.output;
             message += `address: ${ftpServer.address}:${ftpServer.port}\r\n`;

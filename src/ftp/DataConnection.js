@@ -14,9 +14,9 @@ class DataConnection extends TcpServer {
     constructor() {
         super();
         this._clientSocketId;
-        this._accepted = null; // will be a promise
         this._sendEncoder;
         this._textDecoder;
+        this.name = "DataConnection";
     }
 
     set clientSocketId(id) {
@@ -91,25 +91,23 @@ class DataConnection extends TcpServer {
     }
 
     // Override base.
-    startListening(address) {
+    listen(address) {
         const self = this;
-        this._accepted = new Promise(resolve => {
-            self.on("accept", evt => {
-                logger.info(`DataConnection.js accept handler() - accept event: ${JSON.stringify(evt) }, address: ${self.address}:${self.port}`);
-                self.clientSocketId = evt.clientSocketId;
-                resolve();
-            });
+        this.on("accept", acceptInfo => {
+            logger.info(`DataConnection.listen - accept event: ${JSON.stringify(acceptInfo)}, address: ${self.address}:${self.port}`);
+            self.clientSocketId = acceptInfo.clientSocketId;
         });
 
-        this.on("receive", evt => {
+        this.on("receive", receiveInfo => {
+            logger.verbose(`DataConnection.listen - receive event: [${JSON.stringify(receiveInfo)}]`);
             if (self._textDecoder) {
-                const dataView = new DataView(evt.data);
+                const dataView = new DataView(receiveInfo.data);
                 const request = self._textDecoder.decode(dataView);
-                logger.info(`DataConnection.js receive handler() - request [${request.trim() }]`);
+                logger.info(`DataConnection.listen - request [${request.trim()}]`);
             }
         });
 
-        return super.startListening(address);
+        return super.listen(address);
     }
 
 }
