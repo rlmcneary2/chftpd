@@ -11,38 +11,59 @@ class TcpServer extends EventEmitter {
     constructor() {
         super();
         this._connections = new Map();
-        this.address = null;
-        this.port = 0;
-        this.socketId = -1;
+        this._address = null;
+        this._port = 0;
+        this._socketId = -1;
 
         this._acceptHandler = function(info) {
-            log.verbose(`TcpServer._acceptHandler - server socket: ${this.socketId}, acceptInfo: ${JSON.stringify(info)}.`);
-            if (this.socketId !== info.socketId) {
+            //log.verbose(`TcpServer._acceptHandler - server socket: ${this._socketId}, acceptInfo: ${JSON.stringify(info)}.`);
+            if (this._socketId !== info.socketId) {
                 return;
             }
 
-            var self = this;
-            return Promise.resolve(this.createConnection())
-                .then(connection => {
-                    this._connections.set(info.clientSocketId, connection);
-                    return connection.listen(info.clientSocketId);
+            const self = this;
+            return tcpGetSocketInfo(info.clientSocketId)
+                .then(clientSocketInfo => {
+                    log.info(`Accepted connection on client socket ${info.clientSocketId} from: ${JSON.stringify(clientSocketInfo)}.`);
+                    return Promise.resolve(self.createConnection(clientSocketInfo));
                 })
-                .then(c => {
-                    self.emit("accept", { clientSocketId: c.socketId });
+                .then(tc => {
+                    self._connections.set(info.clientSocketId, tc);
+                    return tc.listen(info.clientSocketId);
+                })
+                .then(tc => {
+                    self.emit("accept", { clientSocketId: tc.socketId });
                 });
         }.bind(this);
     }
 
     close() {
-        var self = this;
+        const self = this;
         return tcpClose.call(this)
             .then(() => {
                 self._connections.clear();
+                return self;
             });
     }
 
     createConnection() {
         return new TcpConnection();
+    }
+
+    get address() {
+        return this._address;
+    }
+
+    get port() {
+        return this._port;
+    }
+
+    set port(port) {
+        this._port = port;
+    }
+
+    get socketId() {
+        return this._socketId;
     }
 
     getConnection(clientSocketId) {
@@ -63,22 +84,22 @@ class TcpServer extends EventEmitter {
      * @returns {Promise|object} A Promise that resolves to an object with socket information.
      */
     listen(address) {
-        this.address = address;
-        var self = this;
+        this._address = address;
+        const self = this;
         return tcpCreate()
             .then(socketId => {
-                self.socketId = socketId;
-                return tcpGetSocketInfo(self.socketId);
-            })
-            .then(info => {
-                self.port = info.localPort;
+                self._socketId = socketId;
                 chrome.sockets.tcpServer.onAccept.addListener(self._acceptHandler);
-                return tcpListen(self.socketId, self.address, self.port);
+                return tcpListen(self._socketId, self._address, self._port);
             })
             .then(() => {
+                return tcpGetSocketInfo(self._socketId);
+            })
+            .then(socketInfo => {
+                self._port = socketInfo.localPort;
                 return new Promise(resolve => {
-                    chrome.sockets.tcpServer.setPaused(self.socketId, false, () => {
-                        log.verbose(`TcpServer.listen - server socket ${self.socketId} on port ${self.port} accepting connections.`);
+                    chrome.sockets.tcpServer.setPaused(self._socketId, false, () => {
+                        log.info(`TcpServer.listen - server socket ${self._socketId} on port ${self._port} accepting connections.`);
                         resolve();
                     });
                 });
@@ -126,12 +147,12 @@ function getIPv4NetworkInterfaces() {
 function tcpClose() {
     var self = this;
     return new Promise((resolve) => {
-        log.verbose(`TcpServer.js tcpClose() - removing listeners for socket ${self.socketId}.`);
+        log.verbose(`TcpServer.js tcpClose() - removing listeners for socket ${self._socketId}.`);
         chrome.sockets.tcpServer.onAccept.removeListener(self._acceptHandler);
         disconnectSocketHandlers.call(self)
             .then(() => {
-                chrome.sockets.tcpServer.close(self.socketId, () => {
-                    log.verbose(`TcpServer.js tcpClose() - socket ${self.socketId} closed.`);
+                chrome.sockets.tcpServer.close(self._socketId, () => {
+                    log.verbose(`TcpServer.js tcpClose() - socket ${self._socketId} closed.`);
                     resolve();
                 });
             });
@@ -152,7 +173,7 @@ function tcpClose() {
 //     return new Promise(function(resolve, reject) {
 //         tcpCreate()
 //             .then(function(socketId) {
-//                 self.socketId = socketId;
+//                 self._socketId = socketId;
 //                 tcpListen.call(self, socketId, address, port)
 //                     .then(function() {
 //                         resolve();
@@ -173,18 +194,19 @@ function tcpCreate() {
 function tcpGetSocketInfo(socketId) {
     return new Promise(function(resolve, reject) {
         chrome.sockets.tcpServer.getInfo(socketId, function(socketInfo) {
-            log.verbose(`TcpServer.js tcpGetSocketInfo() - socketInfo: ${JSON.stringify(socketInfo)}.`);
+            let lastErr = chrome.runtime.lastError;
+            //log.verbose(`TcpServer.js tcpGetSocketInfo() - socketInfo: ${JSON.stringify(socketInfo)}.`);
             resolve(socketInfo);
         });
     });
 }
 
 function tcpListen(socketId, address, port) {
-    var self = this;
+    //    var self = this;
     return new Promise(function(resolve) {
-        log.verbose(`TcpServer.js tcpListen() - address: ${address}, port: ${port}.`);
+        log.verbose(`TcpServer.js tcpListen - address: ${address}, port: ${port}.`);
         chrome.sockets.tcpServer.listen(socketId, address, port, () => {
-            chrome.sockets.tcpServer.onAccept.addListener(self._acceptHandler);
+            //            chrome.sockets.tcpServer.onAccept.addListener(self._acceptHandler);
             resolve();
         });
     });

@@ -8,8 +8,9 @@ var log = require("../logging/logger");
 class TcpConnection extends EventEmitter {
 
     constructor() {
-        
+        super();
         this._lastArrived = null;
+        this._socketId;
 
         this._onReceiveHandler = function(info) {
             this._lastArrived = Date.now();
@@ -29,8 +30,6 @@ class TcpConnection extends EventEmitter {
             log.warning(`TcpConnection._onReceiveErrorHandler - info: ${JSON.stringify(info)}`);
             this.emit("error", info);
         }.bind(this);
-
-        this._socketId;
     }
 
     get socketId() {
@@ -43,7 +42,7 @@ class TcpConnection extends EventEmitter {
             disconnectSocketHandlers.call(self);
             chrome.sockets.tcp.close(self._socketId, () => {
                 log.verbose(`TcpConnection.close - client socket ${self._socketId} closed.`);
-                resolve();
+                resolve(self);
             });
         });
     }

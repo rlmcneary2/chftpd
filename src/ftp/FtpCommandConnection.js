@@ -9,6 +9,8 @@ class FtpCommandConnection extends TcpConnection {
 
     constructor() {
         super();
+        this._anonymous = true;
+        this._username = null;
         this.binaryDataTransfer = true;
         this.currentDirectoryEntryId = null;
         this.dataConnection = null;
@@ -16,7 +18,6 @@ class FtpCommandConnection extends TcpConnection {
         this.loggedIn = false;
         this.sendEncoder = null;
         this.textDecoder = null;
-        this.username = null;
 
         this._onReceiveHandler = function(info) {
             if (!this._socketId === info.socketId) {
@@ -39,7 +40,7 @@ class FtpCommandConnection extends TcpConnection {
         this.loggedIn = false;
         this.sendEncoder = null;
         this.textDecoder = null;
-        this.username = null;
+        this._username = null;
         super.close();
     }
 
@@ -52,6 +53,14 @@ class FtpCommandConnection extends TcpConnection {
         let data = this.sendEncoder.encode(message);
         return super.send(data.buffer);
     }
+    
+    set anonymous(anonymous){
+        this._anonymous = anonymous;
+    }
+
+    set username(username) {
+        this._username = username;
+    }
 
 }
 
@@ -60,7 +69,7 @@ module.exports = FtpCommandConnection;
 
 
 function createCommandRequest(request) {
-    const commandSeparatorIndex = request.indexOf(" ");
+    let commandSeparatorIndex = request.indexOf(" ");
     commandSeparatorIndex = 0 <= commandSeparatorIndex ? commandSeparatorIndex : request.indexOf("\r\n"); // Check for command with no arguments.
     const valid = 0 < commandSeparatorIndex;
     let result = {

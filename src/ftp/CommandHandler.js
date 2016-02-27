@@ -21,7 +21,7 @@ class CommandHandler {
             .then(() => {
                 if (!command.valid) {
                     logger.info(`CommandHandler.handleRequest - "${command.command}" is not valid.`);
-            
+
                     // TODO send error response to client.
 
                     return {
@@ -98,7 +98,7 @@ var _supportedCommands = {
             })
             .catch(err => {
                 var response = "400 ";
-                if (typeof err === "object" && err.code){
+                if (typeof err === "object" && err.code) {
                     response = err.code;
                 }
 
@@ -106,14 +106,14 @@ var _supportedCommands = {
                 return fc.send(response);
             });
     },
-    
+
     // feat(server, state, command, sendHandler){
     //     let response = "211-\r\n MLSD\r\n211 \r\n";
     //     return Promise.resolve(sendHandler(response));
     // },
-    
+
     list(server, fc, command) {
-        
+
         // TODO: has the data connection expired? If so send an error response.
 
         const response = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
@@ -143,13 +143,13 @@ var _supportedCommands = {
                 }
             });
     },
-    
+
     // mlsd(server, state, command, sendHandler){
-        
+
     // },
 
     pass(server, fc, command) {
-        var loginMessage = server.getLoginMessage();
+        var loginMessage = server.loginMessage;
         var response = "230 User logged in, proceed.\r\n";
         if (loginMessage) {
             loginMessage = Array.isArray(loginMessage) ? loginMessage : [loginMessage];
@@ -165,14 +165,16 @@ var _supportedCommands = {
             response = "503 USER required first.\r\n";
         }
         else {
-            if (!server.getAllowAnonymousLogin()) {
-                if (fc.username !== server.getUsername() || command.argument !== server.getPassword()) {
+            if (!server.allowAnonymousLogin) {
+                if (fc.username !== server.username || command.argument !== server.password) {
                     fc.username = null;
                     response = "530 Username and/or password is incorrect.\r\n";
                 } else {
+                    fc.anonymous = false;
                     fc.loggedIn = true;
                 }
             } else {
+                fc.anonymous = true;
                 fc.username = command.argument;
                 fc.loggedIn = true;
             }
@@ -180,7 +182,7 @@ var _supportedCommands = {
 
         return fc.send(response);
     },
-    
+
     /**
      * Server should enter passive mode.
      */
@@ -196,7 +198,7 @@ var _supportedCommands = {
                 const fd = fc.dataConnection;
                 // RFC 959 response.
                 const h = fd.address.replace(/\./g, ",");
-                
+
                 // Divide the port value by 256 and discard any fractional
                 // part, this is p1. Subtract p1 * 256 from the port value,
                 // this is p2.
@@ -211,82 +213,80 @@ var _supportedCommands = {
     /**
      * Return an absolute path. The root is the server's current root directory.
      */
-    pwd(server, state, command, sendHandler) {
+    pwd(server, fc, command) {
         var promises = [server.getRootDirectoryEntry()];
-        if (state.currentDirectoryEntryId) {
-            promises.push(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId));
+        if (fc.currentDirectoryEntryId) {
+            promises.push(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId));
         }
 
         var rootEntry = null;
         var currentEntry = null;
         return Promise.all(promises)
-            .then(function (results) {
+            .then(function(results) {
                 rootEntry = results[0];
                 currentEntry = results[1] || results[0];
 
                 var path = currentEntry.fullPath.substring(rootEntry.fullPath.length);
-                if (path.length < 1){
+                if (path.length < 1) {
                     path = "/";
                 }
-                
+
                 path = escapePath(path);
 
                 // The path is surrounded by double quotes.
                 var response = `257 "${path}"\r\n`;
 
-                return Promise.resolve(sendHandler(response));
+                return fc.send(response);
             });
     },
-    
-    syst(server, state, command, sendHandler) {
+
+    syst(server, fc, command) {
         // Much like the http user-agent header SYST has become pointless.
         // Return a supposedly meaningless server string.
-        return Promise.resolve(sendHandler("215 UNIX Type: L8\r\n"));
+        return fc.send("215 UNIX Type: L8\r\n");
     },
-    
-    type(server, state, command, sendHandler) {
+
+    type(server, fc, command) {
         var status = "502 ";
         var fileTransferType = command.argument.toUpperCase();
         switch (fileTransferType) {
             case "A":
-                state.binaryFileTransfer = false;
+                fc.binaryDataTransfer = false;
                 status = "200 ";
                 break;
 
             case "I":
-                state.binaryFileTransfer = true;
+                fc.binaryDataTransfer = true;
                 status = "200 ";
                 break;
         }
 
-        return Promise.resolve(sendHandler(`${status}\r\n`));
+        return fc.send(`${status}\r\n`);
     },
 
-    user(server, state, command, sendHandler) {
-        var response = null;
-        if (typeof state.lastCommand !== "undefined" && state.lastCommand !== null) {
+    user(server, fc, command) {
+        let response = null;
+        if (typeof fc.lastCommand !== "undefined" && fc.lastCommand !== null) {
             // It's an error if USER is not the first command received.
             response = "503 USER required first.\r\n";
         }
 
-        if (typeof state.user !== "undefined") {
+        if (fc.username !== null) {
             // It's an error if USER has already been sent.
             response = "503 already set.\r\n";
         }
 
         // Always allow login to proceed from user. If the username and / or password are incorrect an error is returned in pass().
         if (response === null) {
-            var allowAnonymous = server.getAllowAnonymousLogin();
-            response = `331 Anonymous login ${allowAnonymous ? "is" : "is not"} allowed.\r\n`;
-            state.user = allowAnonymous ? server.getUsername() : command.argument;
+            response = `331 Anonymous login ${server.allowAnonymousLogin ? "is" : "is not"} allowed.\r\n`;
+            fc.user = server.allowAnonymousLogin ? server.username : command.argument;
         }
 
-        return Promise.resolve(sendHandler(response))
-            .then(() => { return; }); // Return nothing here.
+        return fc.send(response);
     },
-    
-    xpwd(server, state, command, sendHandler){
-        return this.pwd(server, state, command, sendHandler);
+
+    xpwd(server, fc, command) {
+        return this.pwd(server, fc, command);
     }
 
 };

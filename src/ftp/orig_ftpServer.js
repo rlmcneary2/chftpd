@@ -12,7 +12,7 @@ class FtpServer extends TcpServer{
     constructor(){
         super();
         this.name = "FtpServer";
-        this.port = 21;
+        this._port = 21;
     }
     
     close() {
@@ -46,8 +46,8 @@ class FtpServer extends TcpServer{
         return _allowAnonymousLogin;
     }
 
-    getControlPort() {
-        return this.port;
+    get port() {
+        return this._port;
     }
 
     getLoginMessage() {
