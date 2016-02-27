@@ -53,9 +53,13 @@ class FtpCommandConnection extends TcpConnection {
         let data = this.sendEncoder.encode(message);
         return super.send(data.buffer);
     }
-    
-    set anonymous(anonymous){
+
+    set anonymous(anonymous) {
         this._anonymous = anonymous;
+    }
+
+    get username() {
+        return this._username;
     }
 
     set username(username) {
