@@ -3,32 +3,18 @@
 
 var fileSystem = require("../fileSystem/fileSystem");
 var logger = require("../logging/logger");
-var TcpServer = require("../tcp/TcpServer");
+const TcpConnection = require("../tcp/TcpConnection");
 
 
 /**
  * This is used to send data to a client using a passive connection.
  */
-class DataConnection extends TcpServer {
+class DataConnection extends TcpConnection {
 
     constructor() {
         super();
-        this._clientSocketId;
-        this._sendEncoder;
-        this._textDecoder;
-        this.name = "DataConnection";
-    }
-
-    set clientSocketId(id) {
-        this._clientSocketId = id;
-    }
-    
-    set sendEncoder(encoder) {
-        this._sendEncoder = encoder;
-    }
-    
-    set textDecoder(decoder){
-        this._textDecoder = decoder;
+        this.sendEncoder = null;
+        this.textDecoder = null;
     }
 
     list(server, state, command) {
@@ -46,7 +32,7 @@ class DataConnection extends TcpServer {
                 let promises = entries.map(entry => {
                     return Promise.resolve(fileSystem.getMetadata(entry))
                         .then(metaData => {
-                            return {entry, metaData};
+                            return { entry, metaData };
                         });
                 });
 
@@ -70,13 +56,13 @@ class DataConnection extends TcpServer {
                     const minute = "01";
                     if (entry.isDirectory) {
                         //return `+/,\t${entry.name}\r\n`;
-                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}`;
+                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false)} ${month} ${day} ${hour}:${minute} ${entry.name}`;
                     } else if (entry.isFile) {
                         //return `+r,\t${entry.name}\r\n`;
-                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false) } ${month} ${day} ${hour}:${minute} ${entry.name}`;
+                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false)} ${month} ${day} ${hour}:${minute} ${entry.name}`;
                     }
                 });
-                
+
                 // Join the strings. Send the response.
                 const message = lsEntries.join("\r\n") + "\r\n";
                 return send.call(this, state.binaryFileTransfer, message);
@@ -134,8 +120,8 @@ function createField(value, length, leftAlignValue) {
 }
 
 function send(binaryFileTransfer, message) {
-    logger.verbose(`DataConnection.js send() - message [${message.trim() }]`);
-    
+    logger.verbose(`DataConnection.js send() - message [${message.trim()}]`);
+
     // TODO: refactor - shared with ftpServer.
     let encodedMessage = null;
     if (binaryFileTransfer) {
@@ -149,6 +135,6 @@ function send(binaryFileTransfer, message) {
 
     return Promise.resolve(this.send(this._clientSocketId, encodedMessage.buffer))
         .then(result => {
-            logger.verbose(`DataConnection.js send() - result [${JSON.stringify(result) }].`);
+            logger.verbose(`DataConnection.js send() - result [${JSON.stringify(result)}].`);
         });
 }

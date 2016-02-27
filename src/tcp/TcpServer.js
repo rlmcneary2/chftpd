@@ -12,7 +12,6 @@ class TcpServer extends EventEmitter {
         super();
         this._connections = new Map();
         this.address = null;
-        this.name = "TcpServer";
         this.port = 0;
         this.socketId = -1;
 
@@ -22,11 +21,12 @@ class TcpServer extends EventEmitter {
                 return;
             }
 
-            var connection = new TcpConnection();
-            this._connections.set(info.clientSocketId, connection);
-
             var self = this;
-            connection.listen(info.clientSocketId)
+            return Promise.resolve(this.createConnection())
+                .then(connection => {
+                    this._connections.set(info.clientSocketId, connection);
+                    return connection.listen(info.clientSocketId);
+                })
                 .then(c => {
                     self.emit("accept", { clientSocketId: c.socketId });
                 });
@@ -39,6 +39,10 @@ class TcpServer extends EventEmitter {
             .then(() => {
                 self._connections.clear();
             });
+    }
+
+    createConnection() {
+        return new TcpConnection();
     }
 
     getConnection(clientSocketId) {

@@ -10,18 +10,17 @@ class CommandHandler {
     /**
      * Handle a command request.
      * @param {FtpServer} server The FtpServer instance that received the request.
-     * @param {object} state An object where state information can be stored for requests from this client and session.
-     * @param {string} request The raw request string.
+     * @param {FtpCommandConnection} fc The connection to the client.
+     * @param {object} command The command information.
      * @param {function} sendHandler A callback that can be used to send a response to this request. The callback takes one argument which is a fully formatted FTP response string including terminating characters "\r\n". The callback returns a Promise that resolves when the message has been sent.
      * @returns {Promise|object} result - An object with information about how the request was handled.
      * @returns {string} result.error - Contains a description of the error that happened. 
      */
-    handleRequest(server, state, request, sendHandler) {
-        var command = createCommandRequest(request);
+    handleRequest(server, fc, command, sendHandler) {
         return Promise.resolve()
             .then(() => {
                 if (!command.valid) {
-                    logger.info(`CommandHandler.js handleRequest() - "${command.command}" is not valid.`);
+                    logger.info(`CommandHandler.handleRequest - "${command.command}" is not valid.`);
             
                     // TODO send error response to client.
 
@@ -33,7 +32,7 @@ class CommandHandler {
 
                 var handlerName = command.command.toLowerCase();
                 if (!_supportedCommands.hasOwnProperty(handlerName)) {
-                    logger.warning(`CommandHandler.js handleRequest() - "${command.command}" is not implemented.`);
+                    logger.warning(`CommandHandler.handleRequest - "${command.command}" is not implemented.`);
 
                     // Send not implemented error response to client.
                     return Promise.resolve(sendHandler("502 Command not implemented.\r\n"))
@@ -41,7 +40,7 @@ class CommandHandler {
                 }
 
                 // Process the client's request using the function that has the same name as the command.
-                return Promise.resolve(_supportedCommands[handlerName](server, state, command, sendHandler));
+                return Promise.resolve(_supportedCommands[handlerName](server, fc, command, sendHandler));
             })
             .then(error => {
                 var result = {
@@ -51,7 +50,7 @@ class CommandHandler {
                 if (typeof error !== "undefined" && error !== null) {
                     result.error = error;
                 } else {
-                    state.lastCommand = command.command;
+                    fc.lastCommand = command.command;
                 }
 
                 return result;
@@ -63,11 +62,11 @@ class CommandHandler {
 
 var _supportedCommands = {
 
-    cwd(server, state, command, sendHandler) {
+    cwd(server, fc, command) {
         // Is the requested directory acessible?
         var promise = [Promise.resolve(server.getRootDirectoryEntry())];
-        if (state.currentDirectoryEntryId) {
-            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(state.currentDirectoryEntryId)));
+        if (fc.currentDirectoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId)));
         }
 
         var rootEntry;
@@ -79,10 +78,10 @@ var _supportedCommands = {
             })
             .then(changedEntry => {
                 if (!changedEntry) {
-                    return Promise.resolve(sendHandler("400 \r\n"));
+                    return fc.send("400 \r\n");
                 }
 
-                state.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
+                fc.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
 
                 var path = changedEntry.fullPath.substring(rootEntry.fullPath.length);
                 if (path.length < 1) {
@@ -92,7 +91,7 @@ var _supportedCommands = {
                 path = escapePath(path);
 
                 var response = `250 directory changed to ${path}\r\n`;
-                return Promise.resolve(sendHandler(response));
+                return fc.send(response);
             })
             .then(() => {
                 return;
@@ -104,7 +103,7 @@ var _supportedCommands = {
                 }
 
                 response += "\r\n";
-                return Promise.resolve(sendHandler(response));
+                return fc.send(response);
             });
     },
     
@@ -113,36 +112,34 @@ var _supportedCommands = {
     //     return Promise.resolve(sendHandler(response));
     // },
     
-    list(server, state, command, sendHandler) {
+    list(server, fc, command) {
         
         // TODO: has the data connection expired? If so send an error response.
 
-        const response = `150 Opening ${state.binaryFileTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
-        sendHandler(response);
+        const response = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        fc.send(response);
 
         // Invoke the DataConnection list function. The function has a fourth
         // parameter for a callback. This callback is invoked after the client
         // has connected to this server. The callback returns a promise that
         // the DataConnection waits to resolve before it sends the data over
         // the connection.
-        return Promise.resolve(state.dataConnection.list(server, state, command))
+        return Promise.resolve(fc.dataConnection.list(server, fc, command))
             .then(response => {
                 logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
-                return sendHandler(response);
+                return fc.send(response);
             })
             .then(() => {
-                return Promise.resolve(state.dataConnection.close());
+                return Promise.resolve(fc.dataConnection.close());
             })
             .then(() => {
                 logger.verbose("CommandHandler.list() - data connection closed.");
-                state.dataConnection = null;
-                delete state.dataConnection;
+                fc.dataConnection = null;
             })
             .catch(err => {
                 logger.error(err);
-                if (state && state.dataConnection) {
-                    state.dataConnection = null;
-                    delete state.dataConnection;
+                if (fc && fc.dataConnection) {
+                    fc.dataConnection = null;
                 }
             });
     },
@@ -151,7 +148,7 @@ var _supportedCommands = {
         
     // },
 
-    pass(server, state, command, sendHandler) {
+    pass(server, fc, command) {
         var loginMessage = server.getLoginMessage();
         var response = "230 User logged in, proceed.\r\n";
         if (loginMessage) {
@@ -163,51 +160,51 @@ var _supportedCommands = {
             response += "230 \r\n";
         }
 
-        if (state.lastCommand !== "USER") {
+        if (fc.lastCommand !== "USER") {
             // It's an error if USER is not the previous command received.
             response = "503 USER required first.\r\n";
         }
         else {
             if (!server.getAllowAnonymousLogin()) {
-                if (state.user !== server.getUsername() || command.argument !== server.getPassword()) {
-                    delete state.user;
+                if (fc.username !== server.getUsername() || command.argument !== server.getPassword()) {
+                    fc.username = null;
                     response = "530 Username and/or password is incorrect.\r\n";
                 } else {
-                    state.loggedIn = true;
+                    fc.loggedIn = true;
                 }
             } else {
-                state.anonymous = command.argument;
-                state.loggedIn = true;
+                fc.username = command.argument;
+                fc.loggedIn = true;
             }
         }
 
-        return Promise.resolve(sendHandler(response));
+        return fc.send(response);
     },
     
     /**
      * Server should enter passive mode.
      */
-    pasv(server, state, command, sendHandler) {
+    pasv(server, fc, command) {
         // TODO: if the client has already made a PASV request close the
         // existing port (stop any data flow first) and discard it. 
 
         // The server must open a port for data connections from the client and
         // listen on this port - for a while. TBD how long to keep the port
         // active.
-        return Promise.resolve(server.createPassiveDataConnection(state))
+        return Promise.resolve(server.createPassiveDataConnection(fc))
             .then(() => {
-                const dataConnection = state.dataConnection;
+                const fd = fc.dataConnection;
                 // RFC 959 response.
-                const h = dataConnection.address.replace(/\./g, ",");
+                const h = fd.address.replace(/\./g, ",");
                 
                 // Divide the port value by 256 and discard any fractional
                 // part, this is p1. Subtract p1 * 256 from the port value,
                 // this is p2.
-                const p1 = Math.trunc(dataConnection.port / 256);
-                const p2 = dataConnection.port - (p1 * 256);
+                const p1 = Math.trunc(fd.port / 256);
+                const p2 = fd.port - (p1 * 256);
 
                 var response = `227 Entering Passive Mode. (${h},${p1},${p2})\r\n`;
-                return Promise.resolve(sendHandler(response));
+                return fc.send(response);
             });
     },
 
@@ -298,22 +295,22 @@ var _supportedCommands = {
 module.exports = CommandHandler;
 
 
-function createCommandRequest(request) {
-    var commandSeparatorIndex = request.indexOf(" ");
-    commandSeparatorIndex = 0 <= commandSeparatorIndex ? commandSeparatorIndex : request.indexOf("\r\n"); // Check for command with no arguments.
-    var valid = 0 < commandSeparatorIndex;
-    var result = {
-        request,
-        valid
-    };
+// function createCommandRequest(request) {
+//     var commandSeparatorIndex = request.indexOf(" ");
+//     commandSeparatorIndex = 0 <= commandSeparatorIndex ? commandSeparatorIndex : request.indexOf("\r\n"); // Check for command with no arguments.
+//     var valid = 0 < commandSeparatorIndex;
+//     var result = {
+//         request,
+//         valid
+//     };
 
-    if (valid) {
-        result.argument = request.substring(commandSeparatorIndex + 1, request.length - 2); // Don't include the \r\n
-        result.command = request.substring(0, commandSeparatorIndex).toUpperCase();
-    }
+//     if (valid) {
+//         result.argument = request.substring(commandSeparatorIndex + 1, request.length - 2); // Don't include the \r\n
+//         result.command = request.substring(0, commandSeparatorIndex).toUpperCase();
+//     }
 
-    return result;
-}
+//     return result;
+// }
 
 function escapePath(path) {
     // A single double quote character '"' should be replaced with two double quotes.

@@ -8,15 +8,17 @@ var log = require("../logging/logger");
 class TcpConnection extends EventEmitter {
 
     constructor() {
+        
+        this._lastArrived = null;
 
         this._onReceiveHandler = function(info) {
-            const arrived = Date.now();
+            this._lastArrived = Date.now();
             if (!this._socketId === info.socketId) {
                 return;
             }
 
             log.verbose(`TcpConnection._onReceiveHandler - receive from client socket ID: ${info.socketId}.`);
-            this.emit("receive", { arrived, clientSocketId: info.socketId, data: info.data });
+            this.emit("receive", { clientSocketId: info.socketId, data: info.data });
         }.bind(this);
 
         this._onReceiveErrorHandler = function(info) {
