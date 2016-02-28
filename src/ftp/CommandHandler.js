@@ -12,48 +12,36 @@ class CommandHandler {
      * @param {FtpServer} server The FtpServer instance that received the request.
      * @param {FtpCommandConnection} fc The connection to the client.
      * @param {object} command The command information.
-     * @param {function} sendHandler A callback that can be used to send a response to this request. The callback takes one argument which is a fully formatted FTP response string including terminating characters "\r\n". The callback returns a Promise that resolves when the message has been sent.
      * @returns {Promise|object} result - An object with information about how the request was handled.
      * @returns {string} result.error - Contains a description of the error that happened. 
      */
-    handleRequest(server, fc, command, sendHandler) {
+    handleRequest(server, fc, command) {
         return Promise.resolve()
             .then(() => {
                 if (!command.valid) {
                     logger.info(`CommandHandler.handleRequest - "${command.command}" is not valid.`);
-
-                    // TODO send error response to client.
-
-                    return {
-                        command,
-                        error: `"${command.command}" is not valid.`
-                    };
+                    return `501 "${command.command}" is not valid.\r\n`;
                 }
 
                 var handlerName = command.command.toLowerCase();
                 if (!_supportedCommands.hasOwnProperty(handlerName)) {
                     logger.warning(`CommandHandler.handleRequest - "${command.command}" is not implemented.`);
-
                     // Send not implemented error response to client.
-                    return Promise.resolve(sendHandler("502 Command not implemented.\r\n"))
-                        .then(() => { return `"${command.command}" is not implemented.`; });
+                    return Promise.resolve("502 Command not implemented.\r\n");
                 }
 
                 // Process the client's request using the function that has the same name as the command.
-                return Promise.resolve(_supportedCommands[handlerName](server, fc, command, sendHandler));
+                return Promise.resolve(_supportedCommands[handlerName](server, fc, command));
             })
-            .then(error => {
-                var result = {
-                    command
-                };
-
-                if (typeof error !== "undefined" && error !== null) {
-                    result.error = error;
-                } else {
-                    fc.lastCommand = command.command;
-                }
-
-                return result;
+            .then(message => {
+                fc.lastCommand = command.command;
+                logger.info(`CommandHandler.receiveHandler - response: [${message.trim()}]`);
+                return fc.send(message);
+            })
+            .catch(error => {
+                logger.warning(`CommandHandler.handleRequest - "${command.command}" error: ${error.message || JSON.stringify(error)}`);
+                const message = "451 Server error.\r\n";
+                return fc.send(message);
             });
     }
 
@@ -78,7 +66,7 @@ var _supportedCommands = {
             })
             .then(changedEntry => {
                 if (!changedEntry) {
-                    return fc.send("400 \r\n");
+                    return "400 \r\n";
                 }
 
                 fc.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
@@ -91,10 +79,7 @@ var _supportedCommands = {
                 path = escapePath(path);
 
                 var response = `250 directory changed to ${path}\r\n`;
-                return fc.send(response);
-            })
-            .then(() => {
-                return;
+                return response;
             })
             .catch(err => {
                 var response = "400 ";
@@ -103,7 +88,7 @@ var _supportedCommands = {
                 }
 
                 response += "\r\n";
-                return fc.send(response);
+                return response;
             });
     },
 
@@ -116,31 +101,32 @@ var _supportedCommands = {
 
         // TODO: has the data connection expired? If so send an error response.
 
-        const response = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
-        fc.send(response);
+        const mark = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        fc.send(mark);
 
         // Invoke the DataConnection list function. The function has a fourth
         // parameter for a callback. This callback is invoked after the client
         // has connected to this server. The callback returns a promise that
         // the DataConnection waits to resolve before it sends the data over
         // the connection.
+        let response = null;
         return Promise.resolve(fc.dataConnection.list(server, fc, command))
-            .then(response => {
+            .then(message => {
                 logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
-                return fc.send(response);
-            })
-            .then(() => {
+                response = message;
                 return Promise.resolve(fc.dataConnection.close());
             })
             .then(() => {
                 logger.verbose("CommandHandler.list() - data connection closed.");
                 fc.dataConnection = null;
+                return response;
             })
             .catch(err => {
                 logger.error(err);
                 if (fc && fc.dataConnection) {
                     fc.dataConnection = null;
                 }
+                return "451 Server LIST error.\r\n";
             });
     },
 
@@ -180,13 +166,13 @@ var _supportedCommands = {
             }
         }
 
-        return fc.send(response);
+        return response;
     },
 
     /**
      * Server should enter passive mode.
      */
-    pasv(server, fc, command) {
+    pasv(server, fc) {
         // TODO: if the client has already made a PASV request close the
         // existing port (stop any data flow first) and discard it. 
 
@@ -205,8 +191,8 @@ var _supportedCommands = {
                 const p1 = Math.trunc(fd.port / 256);
                 const p2 = fd.port - (p1 * 256);
 
-                var response = `227 Entering Passive Mode. (${h},${p1},${p2})\r\n`;
-                return fc.send(response);
+                let response = `227 Entering Passive Mode. (${h},${p1},${p2})\r\n`;
+                return response;
             });
     },
 
@@ -235,15 +221,14 @@ var _supportedCommands = {
 
                 // The path is surrounded by double quotes.
                 var response = `257 "${path}"\r\n`;
-
-                return fc.send(response);
+                return response;
             });
     },
 
-    syst(server, fc, command) {
+    syst() {
         // Much like the http user-agent header SYST has become pointless.
         // Return a supposedly meaningless server string.
-        return fc.send("215 UNIX Type: L8\r\n");
+        return "215 UNIX Type: L8\r\n";
     },
 
     type(server, fc, command) {
@@ -261,7 +246,7 @@ var _supportedCommands = {
                 break;
         }
 
-        return fc.send(`${status}\r\n`);
+        return `${status}\r\n`;
     },
 
     user(server, fc, command) {
@@ -282,7 +267,7 @@ var _supportedCommands = {
             fc.user = server.allowAnonymousLogin ? server.username : command.argument;
         }
 
-        return fc.send(response);
+        return response;
     },
 
     xpwd(server, fc, command) {

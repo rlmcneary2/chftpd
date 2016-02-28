@@ -174,8 +174,5 @@ function acceptHandler(data) {
 
 function receiveHandler(data) {
     const fc = this.getConnection(data.clientSocketId);
-    this._commandHandler.handleRequest(this, fc, data.command, message => {
-        log.info(`ftpServer.js receiveHandler - response: [${message.trim()}]`);
-        return fc.send(message);
-    });
+    this._commandHandler.handleRequest(this, fc, data.command);
 }
