@@ -9,7 +9,7 @@ const TcpConnection = require("../tcp/TcpConnection");
 /**
  * This is used to send data to a client using a passive connection.
  */
-class DataConnection extends TcpConnection {
+class FtpDataConnection extends TcpConnection {
 
     constructor() {
         super();
@@ -80,26 +80,30 @@ class DataConnection extends TcpConnection {
     listen(address) {
         const self = this;
         this.on("accept", acceptInfo => {
-            logger.info(`DataConnection.listen - accept event: ${JSON.stringify(acceptInfo)}, address: ${self.address}:${self.port}`);
+            logger.info(`FtpDataConnection.listen - accept event: ${JSON.stringify(acceptInfo)}, address: ${self.address}:${self.port}`);
             self.clientSocketId = acceptInfo.clientSocketId;
         });
 
         this.on("receive", receiveInfo => {
-            logger.verbose(`DataConnection.listen - receive event: [${JSON.stringify(receiveInfo)}]`);
-            if (self._textDecoder) {
+            logger.verbose(`FtpDataConnection.listen - receive event: [${JSON.stringify(receiveInfo)}]`);
+            if (self.textDecoder) {
                 const dataView = new DataView(receiveInfo.data);
-                const request = self._textDecoder.decode(dataView);
-                logger.info(`DataConnection.listen - request [${request.trim()}]`);
+                const request = self.textDecoder.decode(dataView);
+                logger.info(`FtpDataConnection.listen - request [${request.trim()}]`);
             }
         });
+        
+        // Get a socket ID here.
+        let socketId = 0;
 
-        return super.listen(address);
+        // A client socket ID will be assigned automatically.
+        return super.listen(socketId);
     }
 
 }
 
 
-module.exports = DataConnection;
+module.exports = FtpDataConnection;
 
 
 /**
@@ -120,7 +124,7 @@ function createField(value, length, leftAlignValue) {
 }
 
 function send(binaryFileTransfer, message) {
-    logger.verbose(`DataConnection.js send() - message [${message.trim()}]`);
+    logger.verbose(`FtpDataConnection.js send() - message [${message.trim()}]`);
 
     // TODO: refactor - shared with ftpServer.
     let encodedMessage = null;
@@ -135,6 +139,6 @@ function send(binaryFileTransfer, message) {
 
     return Promise.resolve(this.send(this._clientSocketId, encodedMessage.buffer))
         .then(result => {
-            logger.verbose(`DataConnection.js send() - result [${JSON.stringify(result)}].`);
+            logger.verbose(`FtpDataConnection.js send() - result [${JSON.stringify(result)}].`);
         });
 }

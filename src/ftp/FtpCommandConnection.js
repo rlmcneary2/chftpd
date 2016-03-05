@@ -13,7 +13,7 @@ class FtpCommandConnection extends TcpConnection {
         this._username = null;
         this.binaryDataTransfer = true;
         this.currentDirectoryEntryId = null;
-        this.dataConnection = null;
+        this.passiveServer = null;
         this.lastCommand = null;
         this.loggedIn = false;
         this.sendEncoder = null;
@@ -35,13 +35,24 @@ class FtpCommandConnection extends TcpConnection {
     }
 
     close() {
-        this.dataConnection = null;
-        this.lastCommand = null;
-        this.loggedIn = false;
-        this.sendEncoder = null;
-        this.textDecoder = null;
-        this._username = null;
-        super.close();
+        let p = null;
+        if (this.passiveServer !== null) {
+            p = Promise.resolve(this.passiveServer.close());
+        } else {
+            p = Promise.resolve();
+        }
+
+        let sClose = super.close.bind(this);
+        return p
+            .then(() => {
+                this.passiveServer = null;
+                this.lastCommand = null;
+                this.loggedIn = false;
+                this.sendEncoder = null;
+                this.textDecoder = null;
+                this._username = null;
+                sClose();
+            });
     }
 
     /**

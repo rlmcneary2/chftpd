@@ -110,21 +110,21 @@ var _supportedCommands = {
         // the DataConnection waits to resolve before it sends the data over
         // the connection.
         let response = null;
-        return Promise.resolve(fc.dataConnection.list(server, fc, command))
+        return Promise.resolve(fc.passiveServer.list(server, fc, command))
             .then(message => {
                 logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
                 response = message;
-                return Promise.resolve(fc.dataConnection.close());
+                return Promise.resolve(fc.passiveServer.close());
             })
             .then(() => {
                 logger.verbose("CommandHandler.list() - data connection closed.");
-                fc.dataConnection = null;
+                fc.passiveServer = null;
                 return response;
             })
             .catch(err => {
                 logger.error(err);
-                if (fc && fc.dataConnection) {
-                    fc.dataConnection = null;
+                if (fc && fc.passiveServer) {
+                    fc.passiveServer = null;
                 }
                 return "451 Server LIST error.\r\n";
             });
@@ -179,9 +179,9 @@ var _supportedCommands = {
         // The server must open a port for data connections from the client and
         // listen on this port - for a while. TBD how long to keep the port
         // active.
-        return Promise.resolve(server.createPassiveDataConnection(fc))
+        return Promise.resolve(server.createPassiveServer(fc))
             .then(() => {
-                const fd = fc.dataConnection;
+                const fd = fc.passiveServer;
                 // RFC 959 response.
                 const h = fd.address.replace(/\./g, ",");
 

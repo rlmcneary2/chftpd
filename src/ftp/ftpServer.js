@@ -2,8 +2,9 @@
 
 
 var CommandHandler = require("./CommandHandler");
-var FtpDataConnection = require("./FtpDataConnection");
+//var FtpDataConnection = require("./FtpDataConnection");
 var FtpCommandConnection = require("./FtpCommandConnection");
+const FtpPassiveServer = require("./FtpPassiveServer");
 var log = require("../logging/logger");
 var TcpServer = require("../tcp/TcpServer");
 
@@ -48,14 +49,12 @@ class FtpServer extends TcpServer {
             });
     }
 
-    createPassiveDataConnection(ftpCommandConnection) {
-        const fd = new FtpDataConnection();
-        fd.sendEncoder = this._sendEncoder;
-        fd.textDecoder = this._textDecoder;
-        ftpCommandConnection.dataConnection = fd;
-        return Promise.resolve(fd.listen(this.address))
+    createPassiveServer(ftpCommandConnection) {
+        const ps = new FtpPassiveServer();
+        ftpCommandConnection.passiveServer = ps;
+        return Promise.resolve(ps.listen(this.address))
             .then(() => {
-                log.verbose("ftpServer.createPassiveDataConnection - finish.");
+                log.verbose("ftpServer.createPassiveServer - finish.");
             });
     }
 
