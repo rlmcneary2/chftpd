@@ -2,6 +2,7 @@
 
 
 const FtpDataConnection = require("./FtpDataConnection");
+const log = require("../logging/logger");
 const tcpAsync = require("../tcp/tcpAsync");
 const TcpServer = require("../tcp/TcpServer");
 
@@ -10,37 +11,35 @@ class FtpPassiveServer extends TcpServer {
 
     constructor() {
         super();
-        this._accepted = false;
+        this._clientSocketId = null;
 
+        let self = this;
+        this._accepted = new Promise(resolve => {
+            self.addListener("accept", info => {
+                if (self._clientSocketId !== null) {
+                    log.warning("FtpPassiveServer - already accepted a connection. Only one connection will be accepted.");
+                    tcpAsync.tcpClose(info.clientSocketId);
+                    return;
+                }
+
+                self._clientSocketId = info.clientSocketId;
+                resolve();
+            });
+        });
     }
 
     createConnection() {
-        return new FtpDataConnection();
+        const fdc = new FtpDataConnection();
+        return fdc;
     }
 
-    get acceptHandler() {
-        if (this._acceptHandler === null) {
-            let sah = super.acceptHandler;
-            this._acceptHandler = function(info) {
-                if (this._socketId !== info.socketId) {
-                    return;
-                }
-
-                if (this._accepted) {
-                    tcpAsync.tcpClose(info.socketId);
-                    return;
-                }
-
-                this._accepted = true;
-                
-                sah(info);
-
-            }.bind(this);
-        }
-
-        return this._acceptHandler;
+    get connection() {
+        let self = this;
+        return this._accepted
+            .then(() => {
+                return self._connections.get(self._clientSocketId);
+            });
     }
-
 }
 
 module.exports = FtpPassiveServer;

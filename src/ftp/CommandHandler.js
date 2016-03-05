@@ -104,22 +104,65 @@ var _supportedCommands = {
         const mark = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
         fc.send(mark);
 
-        // Invoke the DataConnection list function. The function has a fourth
-        // parameter for a callback. This callback is invoked after the client
-        // has connected to this server. The callback returns a promise that
-        // the DataConnection waits to resolve before it sends the data over
-        // the connection.
-        let response = null;
-        return Promise.resolve(fc.passiveServer.list(server, fc, command))
-            .then(message => {
-                logger.verbose(`CommandHandler.list() - DataConnection.list() is finished.`);
-                response = message;
+        let message = null;
+        return Promise.resolve(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId))
+            .then(currentDirectory => {
+                // Get a list of files and directories.
+                return Promise.resolve(fileSystem.getDirectoryEntries(currentDirectory));
+            })
+            .then(entries => {
+                // TODO: make a file system metadata request to get information about each entry such as the size etc.
+                let promises = entries.map(entry => {
+                    return Promise.resolve(fileSystem.getMetadata(entry))
+                        .then(metaData => {
+                            return { entry, metaData };
+                        });
+                });
+
+                return Promise.all(promises);
+            })
+            .then(entryData => {
+                let fileSize = 4;
+                entryData.forEach(entryDatum => {
+                    fileSize = fileSize < entryDatum.metaData.size ? entryDatum.metaData.size : fileSize;
+                });
+
+                const fileSizeLength = ("" + fileSize).length;
+
+                // If the command has an argument "-a" ignore it (always return all the entries).
+                // Convert to "EPLF" (hopefully all clients accept it?)
+                const lsEntries = entryData.map(entryDatum => {
+                    const entry = entryDatum.entry;
+                    const month = "Jan";
+                    const day = createField(1, 2, false); // 2 chars
+                    const hour = "01";
+                    const minute = "01";
+                    if (entry.isDirectory) {
+                        //return `+/,\t${entry.name}\r\n`;
+                        return `dr-xr-xr-x 1 0 0 ${createField(4096, fileSizeLength, false)} ${month} ${day} ${hour}:${minute} ${entry.name}`;
+                    } else if (entry.isFile) {
+                        //return `+r,\t${entry.name}\r\n`;
+                        return `-rw-r--r-- 1 0 0 ${createField(entryDatum.metaData.size, fileSizeLength, false)} ${month} ${day} ${hour}:${minute} ${entry.name}`;
+                    }
+                });
+
+                // Join the strings.
+                message = lsEntries.join("\r\n") + "\r\n";
+                
+                // Get the connection to send the response.
+                return fc.passiveServer.connection;
+            })
+            .then(fdc => {
+                return fdc.send(message, fc.binaryDataTransfer);
+            })
+            .then(() => {
+                logger.verbose(`CommandHandler.list() - connection send is finished.`);
                 return Promise.resolve(fc.passiveServer.close());
             })
             .then(() => {
-                logger.verbose("CommandHandler.list() - data connection closed.");
+                logger.verbose("CommandHandler.list() - passive server is closed.");
                 fc.passiveServer = null;
-                return response;
+                return "226 Transfer complete\r\n";
             })
             .catch(err => {
                 logger.error(err);
@@ -280,22 +323,22 @@ var _supportedCommands = {
 module.exports = CommandHandler;
 
 
-// function createCommandRequest(request) {
-//     var commandSeparatorIndex = request.indexOf(" ");
-//     commandSeparatorIndex = 0 <= commandSeparatorIndex ? commandSeparatorIndex : request.indexOf("\r\n"); // Check for command with no arguments.
-//     var valid = 0 < commandSeparatorIndex;
-//     var result = {
-//         request,
-//         valid
-//     };
-
-//     if (valid) {
-//         result.argument = request.substring(commandSeparatorIndex + 1, request.length - 2); // Don't include the \r\n
-//         result.command = request.substring(0, commandSeparatorIndex).toUpperCase();
-//     }
-
-//     return result;
-// }
+/**
+ * Create a text string with specific padding.
+ * @param {any} value Any value that can be converted to a string.
+ * @param {number} length The length of the output string in characters.
+ * @param {boolean} [leftAlignValue=true] If true the value will be aligned to the left side of the string.
+ * @returns {string} A string with the length requested.
+ */
+function createField(value, length, leftAlignValue) {
+    const lav = typeof leftAlignValue !== "boolean" ? true : leftAlignValue;
+    const field = Array(length).join(" ");
+    if (lav) {
+        return (value + field).substring(0, length);
+    } else {
+        return (field + value).slice(-length);
+    }
+}
 
 function escapePath(path) {
     // A single double quote character '"' should be replaced with two double quotes.

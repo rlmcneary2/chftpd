@@ -1,7 +1,7 @@
 "use strict";
 
 
-var log = require("../logging/logger");
+const log = require("../logging/logger");
 const TcpConnection = require("../tcp/TcpConnection");
 
 

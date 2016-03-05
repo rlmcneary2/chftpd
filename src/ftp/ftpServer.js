@@ -2,7 +2,6 @@
 
 
 var CommandHandler = require("./CommandHandler");
-//var FtpDataConnection = require("./FtpDataConnection");
 var FtpCommandConnection = require("./FtpCommandConnection");
 const FtpPassiveServer = require("./FtpPassiveServer");
 var log = require("../logging/logger");
@@ -51,6 +50,7 @@ class FtpServer extends TcpServer {
 
     createPassiveServer(ftpCommandConnection) {
         const ps = new FtpPassiveServer();
+        ps.binaryDataTransfer = ftpCommandConnection.binaryDataTransfer;
         ftpCommandConnection.passiveServer = ps;
         return Promise.resolve(ps.listen(this.address))
             .then(() => {

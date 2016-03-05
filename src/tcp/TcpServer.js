@@ -28,6 +28,7 @@ class TcpServer extends EventEmitter {
                 return tcpAsync.tcpServerClose.call(this, this._socketId, this.acceptHandler);
             })
             .then(() => {
+                log.verbose(`TcpServer.close - server socket ${self._socketId} close.`);
                 return self;
             });
     }
@@ -40,7 +41,6 @@ class TcpServer extends EventEmitter {
         if (this._acceptHandler === null) {
 
             this._acceptHandler = function(info) {
-                //log.verbose(`TcpServer._acceptHandler - server socket: ${this._socketId}, acceptInfo: ${JSON.stringify(info)}.`);
                 if (this._socketId !== info.socketId) {
                     return;
                 }
@@ -48,7 +48,7 @@ class TcpServer extends EventEmitter {
                 const self = this;
                 return tcpAsync.tcpGetSocketInfo(info.clientSocketId)
                     .then(clientSocketInfo => {
-                        log.info(`Accepted connection on client socket ${info.clientSocketId} from: ${JSON.stringify(clientSocketInfo)}.`);
+                        log.info(`TcpServer.acceptHandler - accepted connection on client socket ${info.clientSocketId} from: ${JSON.stringify(clientSocketInfo)}.`);
                         return Promise.resolve(self.createConnection(clientSocketInfo));
                     })
                     .then(tc => {
@@ -126,8 +126,9 @@ module.exports = TcpServer;
 
 
 function disconnectSocketHandlers() {
-    let promises = this._connections.forEach(val => {
-        return val.close();
+    let promises = [];
+    this._connections.forEach(val => {
+        promises.push(val.close());
     }, this);
 
     return Promise.all(promises);
