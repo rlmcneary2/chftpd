@@ -82,9 +82,9 @@ var _supportedCommands = {
                 return response;
             })
             .catch(err => {
-                var response = "400 ";
+                let response = "400 ";
                 if (typeof err === "object" && err.code) {
-                    response = err.code;
+                    response = `${err.code} ${command.argument} ${err.message}`;
                 }
 
                 response += "\r\n";
@@ -148,7 +148,7 @@ var _supportedCommands = {
 
                 // Join the strings.
                 message = lsEntries.join("\r\n") + "\r\n";
-                
+
                 // Get the connection to send the response.
                 return fc.passiveServer.connection;
             })
