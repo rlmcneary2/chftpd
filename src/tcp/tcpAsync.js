@@ -42,10 +42,8 @@ module.exports = {
         });
     },
 
-    tcpServerClose(socketId, acceptHandler) {
+    tcpServerClose(socketId) {
         return new Promise((resolve) => {
-            log.verbose(`tcpAsync.js tcpServerClose - removing listener for socket ${socketId}.`);
-            chrome.sockets.tcpServer.onAccept.removeListener(acceptHandler);
             chrome.sockets.tcpServer.close(socketId, () => {
                 log.verbose(`tcpAsync.js tcpServerClose - socket ${socketId} closed.`);
                 resolve();

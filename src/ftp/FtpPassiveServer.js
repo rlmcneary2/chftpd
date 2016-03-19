@@ -1,9 +1,7 @@
 "use strict";
 
 
-const FtpDataConnection = require("./FtpDataConnection");
 const log = require("../logging/logger");
-const tcpAsync = require("../tcp/tcpAsync");
 const TcpServer = require("../tcp/TcpServer");
 
 
@@ -11,35 +9,43 @@ class FtpPassiveServer extends TcpServer {
 
     constructor() {
         super();
-        this._clientSocketId = null;
+        this._logName = "FtpPassiveServer";
+        this._maxConnections = 1;
+        this._sendEncoder = null;
+    }
 
-        let self = this;
-        this._accepted = new Promise(resolve => {
-            self.addListener("accept", info => {
-                if (self._clientSocketId !== null) {
-                    log.warning("FtpPassiveServer - already accepted a connection. Only one connection will be accepted.");
-                    tcpAsync.tcpClose(info.clientSocketId);
-                    return;
-                }
+    close() {
+        this._sendEncoder = null;
+        super.close();
+    }
 
-                self._clientSocketId = info.clientSocketId;
-                resolve();
+    get clientSocketId() {
+        return this.clientSockets.keys().next().value;
+    }
+
+    send(clientSocketId, message, binaryDataTransfer) {
+        log.verbose(`${this._logName}[${this._instanceCount}].send - message [${message.trim()}]`);
+        let encodedMessage = null;
+        if (binaryDataTransfer) {
+            encodedMessage = this._sendEncoder.encode(message);
+        } else {
+            encodedMessage = new Int8Array(message.length);
+            for (let i = 0; i < message.length; i++) {
+                encodedMessage[i] = message.charCodeAt(i);
+            }
+        }
+
+        return Promise.resolve(super.send(clientSocketId, encodedMessage.buffer))
+            .then(result => {
+                log.verbose(`${this._logName}[${this._instanceCount}].send - result [${JSON.stringify(result)}].`);
             });
-        });
     }
 
-    createConnection() {
-        const fdc = new FtpDataConnection();
-        return fdc;
+    set sendEncoder(encoder) {
+        this._sendEncoder = encoder;
     }
 
-    get connection() {
-        let self = this;
-        return this._accepted
-            .then(() => {
-                return self._connections.get(self._clientSocketId);
-            });
-    }
 }
+
 
 module.exports = FtpPassiveServer;

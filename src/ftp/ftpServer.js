@@ -1,11 +1,10 @@
 "use strict";
 
 
-var CommandHandler = require("./CommandHandler");
-var FtpCommandConnection = require("./FtpCommandConnection");
+const CommandHandler = require("./CommandHandler");
 const FtpPassiveServer = require("./FtpPassiveServer");
-var log = require("../logging/logger");
-var TcpServer = require("../tcp/TcpServer");
+const log = require("../logging/logger");
+const TcpServer = require("../tcp/TcpServer");
 
 
 class FtpServer extends TcpServer {
@@ -14,7 +13,10 @@ class FtpServer extends TcpServer {
         super();
         this._port = 21;
 
+        this._acceptEventHandler = acceptHandler.bind(this);
         this._commandHandler = new CommandHandler();
+        this._logName = "FtpServer";
+        this._receiveEventHandler = receiveHandler.bind(this);
         this._rootDirectoryEntry = null;
         this._rootDirectoryEntryId = null;
         this._sendEncoder = new TextEncoder("utf8");
@@ -36,22 +38,11 @@ class FtpServer extends TcpServer {
         super.close();
     }
 
-    createConnection() {
-        const self = this;
-        return this.getRootDirectoryEntryId()
-            .then(rootDirectoryId => {
-                const fc = new FtpCommandConnection();
-                fc.sendEncoder = self._sendEncoder;
-                fc.textDecoder = self._textDecoder;
-                fc.currentDirectoryEntryId = rootDirectoryId;
-                return fc;
-            });
-    }
-
-    createPassiveServer(ftpCommandConnection) {
+    createPassiveServer(clientSocket) {
         const ps = new FtpPassiveServer();
-        ps.binaryDataTransfer = ftpCommandConnection.binaryDataTransfer;
-        ftpCommandConnection.passiveServer = ps;
+        ps.sendEncoder = this.sendEncoder;
+        ps.binaryDataTransfer = clientSocket.binaryDataTransfer;
+        clientSocket.passiveServer = ps;
         return Promise.resolve(ps.listen(this.address))
             .then(() => {
                 log.verbose("ftpServer.createPassiveServer - finish.");
@@ -60,6 +51,14 @@ class FtpServer extends TcpServer {
 
     get password() {
         return this._password;
+    }
+
+    get sendEncoder() {
+        return this._sendEncoder;
+    }
+
+    get textDecoder() {
+        return this._textDecoder;
     }
 
     get username() {
@@ -120,8 +119,27 @@ class FtpServer extends TcpServer {
     }
 
     listen(address) {
-        this.addListener("accept", acceptHandler.bind(this));
+        this.addListener("accept", this._acceptEventHandler);
+        this.addListener("receive", this._receiveEventHandler);
         return super.listen(address);
+    }
+
+    send(clientSocketId, message, binaryDataTransfer) {
+        log.verbose(`ftpServer.send - message [${message.trim()}]`);
+        let encodedMessage = null;
+        if (binaryDataTransfer) {
+            encodedMessage = this.sendEncoder.encode(message);
+        } else {
+            encodedMessage = new Int8Array(message.length);
+            for (let i = 0; i < message.length; i++) {
+                encodedMessage[i] = message.charCodeAt(i);
+            }
+        }
+
+        return Promise.resolve(super.send(clientSocketId, encodedMessage.buffer))
+            .then(result => {
+                log.verbose(`ftpServer.send - result [${JSON.stringify(result)}].`);
+            });
     }
 
     setRootDirectoryEntryId(id) {
@@ -134,7 +152,6 @@ class FtpServer extends TcpServer {
 
             self._rootDirectoryEntryId = id ? id : null;
             self._rootDirectoryEntry = null;
-            //self._rootDirectoryEntryFullPath = null;
 
             if (self._rootDirectoryEntryId === null) {
                 chrome.storage.local.remove("rootEntryId", function() {
@@ -163,15 +180,37 @@ module.exports = new FtpServer();
 const _WELCOME_MESSAGE = "Welcome to chftpd.";
 
 
-function acceptHandler(data) {
-    const fc = this.getConnection(data.clientSocketId);
-    fc.addListener("receive", receiveHandler.bind(this));
+function acceptHandler(evt) {
+    const cs = this.clientSockets.get(evt.clientSocketId);
+    cs.binaryDataTransfer = true;
 
     const message = `220 ${_WELCOME_MESSAGE}${this.allowAnonymousLogin ? " Anonymous login allowed; please send email as password." : ""}\r\n`;
-    fc.send(message);
+    this.send(evt.clientSocketId, message, true);
 }
 
-function receiveHandler(data) {
-    const fc = this.getConnection(data.clientSocketId);
-    this._commandHandler.handleRequest(this, fc, data.command);
+function createCommandRequest(request) {
+    let commandSeparatorIndex = request.indexOf(" ");
+    commandSeparatorIndex = 0 <= commandSeparatorIndex ? commandSeparatorIndex : request.indexOf("\r\n"); // Check for command with no arguments.
+    const valid = 0 < commandSeparatorIndex;
+    let result = {
+        request,
+        valid
+    };
+
+    if (valid) {
+        result.argument = request.substring(commandSeparatorIndex + 1, request.length - 2); // Don't include the \r\n
+        result.command = request.substring(0, commandSeparatorIndex).toUpperCase();
+    }
+
+    return result;
+}
+
+function receiveHandler(evt) {
+    const cs = this.clientSockets.get(evt.clientSocketId);
+
+    var dataView = new DataView(evt.data);
+    var request = this.textDecoder.decode(dataView);
+    log.verbose(`ftpServer.receiveHandler - receive from client socket ID ${evt.clientSocketId} request [${request.trim()}]`);
+
+    this._commandHandler.handleRequest(this, cs, createCommandRequest(request));
 }

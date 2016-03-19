@@ -10,12 +10,12 @@ class CommandHandler {
     /**
      * Handle a command request.
      * @param {FtpServer} server The FtpServer instance that received the request.
-     * @param {FtpCommandConnection} fc The connection to the client.
+     * @param {object} clientSocket Client socket data.
      * @param {object} command The command information.
      * @returns {Promise|object} result - An object with information about how the request was handled.
      * @returns {string} result.error - Contains a description of the error that happened. 
      */
-    handleRequest(server, fc, command) {
+    handleRequest(server, clientSocket, command) {
         return Promise.resolve()
             .then(() => {
                 if (!command.valid) {
@@ -31,17 +31,17 @@ class CommandHandler {
                 }
 
                 // Process the client's request using the function that has the same name as the command.
-                return Promise.resolve(_supportedCommands[handlerName](server, fc, command));
+                return Promise.resolve(_supportedCommands[handlerName](server, clientSocket, command));
             })
             .then(message => {
-                fc.lastCommand = command.command;
+                clientSocket.lastCommand = command.command;
                 logger.info(`CommandHandler.receiveHandler - response: [${message.trim()}]`);
-                return fc.send(message);
+                return server.send(clientSocket.socketId, message);
             })
             .catch(error => {
                 logger.warning(`CommandHandler.handleRequest - "${command.command}" error: ${error.message || JSON.stringify(error)}`);
                 const message = "451 Server error.\r\n";
-                return fc.send(message);
+                return server.send(clientSocket.socketId, message);
             });
     }
 
@@ -50,11 +50,11 @@ class CommandHandler {
 
 var _supportedCommands = {
 
-    cwd(server, fc, command) {
+    cwd(server, clientSocket, command) {
         // Is the requested directory acessible?
         var promise = [Promise.resolve(server.getRootDirectoryEntry())];
-        if (fc.currentDirectoryEntryId) {
-            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId)));
+        if (clientSocket.currentDirectoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId)));
         }
 
         var rootEntry;
@@ -69,7 +69,7 @@ var _supportedCommands = {
                     return "400 \r\n";
                 }
 
-                fc.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
+                clientSocket.currentDirectoryEntryId = chrome.fileSystem.retainEntry(changedEntry);
 
                 var path = changedEntry.fullPath.substring(rootEntry.fullPath.length);
                 if (path.length < 1) {
@@ -97,15 +97,15 @@ var _supportedCommands = {
     //     return Promise.resolve(sendHandler(response));
     // },
 
-    list(server, fc, command) {
+    list(server, clientSocket, command) {
 
         // TODO: has the data connection expired? If so send an error response.
 
-        const mark = `150 Opening ${fc.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
-        fc.send(mark);
+        const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        server.send(clientSocket.socketId, mark);
 
         let message = null;
-        return Promise.resolve(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId))
+        return Promise.resolve(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId))
             .then(currentDirectory => {
                 // Get a list of files and directories.
                 return Promise.resolve(fileSystem.getDirectoryEntries(currentDirectory));
@@ -150,24 +150,21 @@ var _supportedCommands = {
                 message = lsEntries.join("\r\n") + "\r\n";
 
                 // Get the connection to send the response.
-                return fc.passiveServer.connection;
-            })
-            .then(fdc => {
-                return fdc.send(message, fc.binaryDataTransfer);
+                return clientSocket.passiveServer.send(clientSocket.passiveServer.clientSocketId, message, clientSocket.binaryDataTransfer);
             })
             .then(() => {
                 logger.verbose(`CommandHandler.list() - connection send is finished.`);
-                return Promise.resolve(fc.passiveServer.close());
+                return Promise.resolve(clientSocket.passiveServer.close());
             })
             .then(() => {
                 logger.verbose("CommandHandler.list() - passive server is closed.");
-                fc.passiveServer = null;
+                clientSocket.passiveServer = null;
                 return "226 Transfer complete\r\n";
             })
             .catch(err => {
                 logger.error(err);
-                if (fc && fc.passiveServer) {
-                    fc.passiveServer = null;
+                if (clientSocket && clientSocket.passiveServer) {
+                    clientSocket.passiveServer = null;
                 }
                 return "451 Server LIST error.\r\n";
             });
@@ -177,7 +174,7 @@ var _supportedCommands = {
 
     // },
 
-    pass(server, fc, command) {
+    pass(server, clientSocket, command) {
         var loginMessage = server.loginMessage;
         var response = "230 User logged in, proceed.\r\n";
         if (loginMessage) {
@@ -189,23 +186,23 @@ var _supportedCommands = {
             response += "230 \r\n";
         }
 
-        if (fc.lastCommand !== "USER") {
+        if (clientSocket.lastCommand !== "USER") {
             // It's an error if USER is not the previous command received.
             response = "503 USER required first.\r\n";
         }
         else {
             if (!server.allowAnonymousLogin) {
-                if (fc.username !== server.username || command.argument !== server.password) {
-                    fc.username = null;
+                if (clientSocket.username !== server.username || command.argument !== server.password) {
+                    clientSocket.username = null;
                     response = "530 Username and/or password is incorrect.\r\n";
                 } else {
-                    fc.anonymous = false;
-                    fc.loggedIn = true;
+                    clientSocket.anonymous = false;
+                    clientSocket.loggedIn = true;
                 }
             } else {
-                fc.anonymous = true;
-                fc.username = command.argument;
-                fc.loggedIn = true;
+                clientSocket.anonymous = true;
+                clientSocket.username = command.argument;
+                clientSocket.loggedIn = true;
             }
         }
 
@@ -215,16 +212,16 @@ var _supportedCommands = {
     /**
      * Server should enter passive mode.
      */
-    pasv(server, fc) {
+    pasv(server, clientSocket) {
         // TODO: if the client has already made a PASV request close the
         // existing port (stop any data flow first) and discard it. 
 
         // The server must open a port for data connections from the client and
         // listen on this port - for a while. TBD how long to keep the port
         // active.
-        return Promise.resolve(server.createPassiveServer(fc))
+        return Promise.resolve(server.createPassiveServer(clientSocket))
             .then(() => {
-                const fd = fc.passiveServer;
+                const fd = clientSocket.passiveServer;
                 // RFC 959 response.
                 const h = fd.address.replace(/\./g, ",");
 
@@ -242,10 +239,10 @@ var _supportedCommands = {
     /**
      * Return an absolute path. The root is the server's current root directory.
      */
-    pwd(server, fc, command) {
+    pwd(server, clientSocket, command) {
         var promises = [server.getRootDirectoryEntry()];
-        if (fc.currentDirectoryEntryId) {
-            promises.push(fileSystem.getFileSystemEntry(fc.currentDirectoryEntryId));
+        if (clientSocket.currentDirectoryEntryId) {
+            promises.push(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId));
         }
 
         var rootEntry = null;
@@ -274,17 +271,17 @@ var _supportedCommands = {
         return "215 UNIX Type: L8\r\n";
     },
 
-    type(server, fc, command) {
+    type(server, clientSocket, command) {
         var status = "502 ";
         var fileTransferType = command.argument.toUpperCase();
         switch (fileTransferType) {
             case "A":
-                fc.binaryDataTransfer = false;
+                clientSocket.binaryDataTransfer = false;
                 status = "200 ";
                 break;
 
             case "I":
-                fc.binaryDataTransfer = true;
+                clientSocket.binaryDataTransfer = true;
                 status = "200 ";
                 break;
         }
@@ -292,14 +289,14 @@ var _supportedCommands = {
         return `${status}\r\n`;
     },
 
-    user(server, fc, command) {
+    user(server, clientSocket, command) {
         let response = null;
-        if (typeof fc.lastCommand !== "undefined" && fc.lastCommand !== null) {
+        if (typeof clientSocket.lastCommand !== "undefined" && clientSocket.lastCommand !== null) {
             // It's an error if USER is not the first command received.
             response = "503 USER required first.\r\n";
         }
 
-        if (fc.username !== null) {
+        if (clientSocket.username) {
             // It's an error if USER has already been sent.
             response = "503 already set.\r\n";
         }
@@ -307,7 +304,7 @@ var _supportedCommands = {
         // Always allow login to proceed from user. If the username and / or password are incorrect an error is returned in pass().
         if (response === null) {
             response = `331 Anonymous login ${server.allowAnonymousLogin ? "is" : "is not"} allowed.\r\n`;
-            fc.user = server.allowAnonymousLogin ? server.username : command.argument;
+            clientSocket.user = server.allowAnonymousLogin ? server.username : command.argument;
         }
 
         return response;

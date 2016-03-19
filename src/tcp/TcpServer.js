@@ -1,10 +1,12 @@
 "use strict";
 
 
-var EventEmitter = require("eventemitter3");
-var log = require("../logging/logger");
+const EventEmitter = require("eventemitter3");
+const log = require("../logging/logger");
 const tcpAsync = require("./tcpAsync");
-var TcpConnection = require("./TcpConnection");
+
+
+let iCount = 1;
 
 
 class TcpServer extends EventEmitter {
@@ -12,52 +14,58 @@ class TcpServer extends EventEmitter {
     constructor() {
         super();
         this._acceptHandler = null;
-        this._connections = new Map();
         this._address = null;
+        this._clientSockets = new Map();
+        this._instanceCount = (iCount++);
+        this._logName = "TcpServer";
+        this._maxConnections = 0;
         this._port = 0;
+        this._receiveHandler = null;
         this._socketId = -1;
     }
 
     close() {
+        let closePromises = [];
+        this._clientSockets.forEach((v, k) => {
+            log.verbose(`${this._logName}[${this._instanceCount}].close - closing client socket ${k}.`);
+            closePromises.push(tcpAsync.tcpClose(k));
+        });
+
+        this._clientSockets.clear();
+        chrome.sockets.tcpServer.onAccept.removeListener(this.acceptHandler);
+        chrome.sockets.tcp.onReceive.removeListener(this.eceiveHandler);
+
         const self = this;
-        return disconnectSocketHandlers.call(self)
+        return Promise.all(closePromises)
             .then(() => {
-                self._connections.clear();
+                return tcpAsync.tcpServerClose.call(this, this.socketId);
             })
             .then(() => {
-                return tcpAsync.tcpServerClose.call(this, this._socketId, this.acceptHandler);
-            })
-            .then(() => {
-                log.verbose(`TcpServer.close - server socket ${self._socketId} close.`);
+                log.verbose(`${this._logName}[${this._instanceCount}].close - server socket ${self.socketId} closed.`);
                 return self;
             });
     }
 
-    createConnection() {
-        return new TcpConnection();
-    }
-
     get acceptHandler() {
         if (this._acceptHandler === null) {
-
             this._acceptHandler = function(info) {
-                if (this._socketId !== info.socketId) {
+                if (this.socketId !== info.socketId) {
                     return;
                 }
 
-                const self = this;
-                return tcpAsync.tcpGetSocketInfo(info.clientSocketId)
-                    .then(clientSocketInfo => {
-                        log.info(`TcpServer.acceptHandler - accepted connection on client socket ${info.clientSocketId} from: ${JSON.stringify(clientSocketInfo)}.`);
-                        return Promise.resolve(self.createConnection(clientSocketInfo));
-                    })
-                    .then(tc => {
-                        self._connections.set(info.clientSocketId, tc);
-                        return tc.listen(info.clientSocketId);
-                    })
-                    .then(tc => {
-                        self.emit("accept", { clientSocketId: tc.socketId });
-                    });
+                if (0 < this._maxConnections && this._maxConnections <= this.clientSockets.size) {
+                    log.warning(`${this._logName}[${this._instanceCount}].acceptHandler - already accepted the maximum number of connections.`);
+                    tcpAsync.tcpClose(info.clientSocketId);
+                    return;
+                }
+
+                log.info(`${this._logName}[${this._instanceCount}].acceptHandler - accepted connection from client socket ${info.clientSocketId}.`);
+                this.clientSockets.set(info.clientSocketId, { connected: Date.now(), socketId: info.clientSocketId });
+
+                chrome.sockets.tcp.setPaused(info.clientSocketId, false, () => {
+                    log.verbose(`${this._logName}[${this._instanceCount}].acceptHandler - client socket ${info.clientSocketId} un-paused.`);
+                    this.emit("accept", { clientSocketId: info.clientSocketId });
+                });
             }.bind(this);
         }
 
@@ -68,24 +76,33 @@ class TcpServer extends EventEmitter {
         return this._address;
     }
 
+    get clientSockets() {
+        return this._clientSockets;
+    }
+
     get port() {
         return this._port;
     }
 
-    set port(port) {
-        this._port = port;
+    get receiveHandler() {
+        if (this._receiveHandler === null) {
+            {
+                this._receiveHandler = function(info) {
+                    if (!this.clientSockets.has(info.socketId)) {
+                        return;
+                    }
+
+                    log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
+                    this.emit("receive", { clientSocketId: info.socketId, data: info.data });
+                }.bind(this);
+            }
+        }
+
+        return this._receiveHandler;
     }
 
     get socketId() {
         return this._socketId;
-    }
-
-    getConnection(clientSocketId) {
-        if (!this._connections.has(clientSocketId)) {
-            return null;
-        }
-
-        return this._connections.get(clientSocketId);
     }
 
     getNetworkInterfaces() {
@@ -98,41 +115,54 @@ class TcpServer extends EventEmitter {
      * @returns {Promise|object} A Promise that resolves to an object with socket information.
      */
     listen(address) {
+        log.info(`${this._logName}[${this._instanceCount}].listen - address: ${address}.`);
         this._address = address;
         const self = this;
         return tcpAsync.tcpCreate()
             .then(socketId => {
                 self._socketId = socketId;
                 chrome.sockets.tcpServer.onAccept.addListener(self.acceptHandler);
-                return tcpAsync.tcpListen(self._socketId, self._address, self._port);
+                chrome.sockets.tcp.onReceive.addListener(self.receiveHandler);
+                return tcpAsync.tcpListen(self.socketId, self._address, self._port);
             })
             .then(() => {
-                return tcpAsync.tcpGetSocketInfo(self._socketId);
+                return tcpAsync.tcpGetSocketInfo(self.socketId);
             })
             .then(socketInfo => {
                 self._port = socketInfo.localPort;
                 return new Promise(resolve => {
-                    chrome.sockets.tcpServer.setPaused(self._socketId, false, () => {
-                        log.info(`TcpServer.listen - server socket ${self._socketId} on port ${self._port} accepting connections.`);
+                    chrome.sockets.tcpServer.setPaused(self.socketId, false, () => {
+                        log.info(`${self._logName}[${self._instanceCount}].listen - server socket ${self.socketId} on port ${self._port} accepting connections.`);
                         resolve();
                     });
                 });
             });
     }
+
+    send(clientSocketId, data) {
+        const self = this;
+        return new Promise(function(resolve, reject) {
+            log.verbose(`${self._logName}[${self._instanceCount}].send - client socket ${clientSocketId} sent.`);
+            chrome.sockets.tcp.send(clientSocketId, data, sendInfo => {
+                if (sendInfo.resultCode < 0) {
+                    reject(sendInfo);
+                    return;
+                }
+
+                resolve(sendInfo);
+            });
+        });
+    }
+
+    set port(port) {
+        this._port = port;
+    }
+
 }
 
 
 module.exports = TcpServer;
 
-
-function disconnectSocketHandlers() {
-    let promises = [];
-    this._connections.forEach(val => {
-        promises.push(val.close());
-    }, this);
-
-    return Promise.all(promises);
-}
 
 function getIPv4NetworkInterfaces() {
     return new Promise(function(resolve, reject) {
