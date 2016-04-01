@@ -77,14 +77,40 @@ module.exports = {
 };
 
 
+function buildFullyQualifiedPath(rootEntry, clientPath) {
+    if (!clientPath || clientPath.length < 1) {
+        throw "fileSystem.js getDirectoryEntryForPath - path is null, undefined, or empty.";
+    }
+
+    if (clientPath === "/") {
+        return rootEntry.fullPath;
+    }
+
+    // If the path starts with root (/) then simply build a fully qualified path.
+    if (clientPath.startsWith("/")) {
+        return "/" + trimPathEnds(rootEntry.fullPath) + "/" + trimPathEnds(clientPath) + "/";
+    }
+    
+    // "."
+    
+    // ".."
+    
+    // relative path
+
+}
+
+
 function getDirectoryEntryForPath(rootEntry, parentEntry, path) {
     if (!path || path.length < 1) {
         throw "fileSystem.js getDirectoryEntryForPath - path is null, undefined, or empty.";
     }
 
     if (path === "/") {
-        return parentEntry;
+        return rootEntry;
     }
+
+    // If the path starts with root (/) then simply build a fully qualified path
+
 
     let p = trimPathEnds(path);
     let e = parentEntry;
