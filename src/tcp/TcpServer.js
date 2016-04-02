@@ -154,6 +154,10 @@ class TcpServer extends EventEmitter {
         });
     }
 
+    sendStream(clientSocketId, getDataCallback) {
+        return sendAllData(clientSocketId, getDataCallback);
+    }
+
     set port(port) {
         this._port = port;
     }
@@ -185,6 +189,33 @@ function getIPv4NetworkInterfaces() {
             }
 
             resolve(interfaces);
+        });
+    });
+}
+
+function sendAllData(clientSocketId, getDataCallback) {
+    return Promise.resolve(getDataCallback())
+        .then(data => {
+            if (data === null) {
+                return;
+            }
+
+            return sendData(clientSocketId, data)
+                .then(() => {
+                    return sendAllData(clientSocketId, getDataCallback);
+                });
+        });
+}
+
+function sendData(clientSocketId, data) {
+    return new Promise((resolve, reject) => {
+        chrome.sockets.tcp.send(clientSocketId, data, sendInfo => {
+            if (sendInfo.resultCode < 0) {
+                reject(sendInfo);
+                return;
+            }
+
+            resolve(sendInfo);
         });
     });
 }

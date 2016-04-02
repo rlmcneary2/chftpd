@@ -7,6 +7,9 @@ const log = require("../logging/logger");
 const TcpServer = require("../tcp/TcpServer");
 
 
+const _DEFAULT_STREAM_BUFFER_SIZE = 1024 * 100;
+
+
 class FtpServer extends TcpServer {
 
     constructor() {
@@ -20,6 +23,7 @@ class FtpServer extends TcpServer {
         this._rootDirectoryEntry = null;
         this._rootDirectoryEntryId = null;
         this._sendEncoder = new TextEncoder("utf8");
+        this._streamBufferSize = _DEFAULT_STREAM_BUFFER_SIZE;
         this._textDecoder = new TextDecoder("utf8");
         this._username = null;
         this._password = null;
@@ -55,6 +59,10 @@ class FtpServer extends TcpServer {
 
     get sendEncoder() {
         return this._sendEncoder;
+    }
+
+    get streamBufferSize() {
+        return this._streamBufferSize;
     }
 
     get textDecoder() {
@@ -142,6 +150,10 @@ class FtpServer extends TcpServer {
             });
     }
 
+    set streamBufferSize(size) {
+        this._streamBufferSize = size;
+    }
+
     setRootDirectoryEntryId(id) {
         const self = this;
         return new Promise(function(resolve, reject) {
@@ -171,6 +183,7 @@ class FtpServer extends TcpServer {
             }
         });
     }
+
 }
 
 
