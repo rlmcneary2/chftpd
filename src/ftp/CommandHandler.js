@@ -82,11 +82,8 @@ var _supportedCommands = {
                 return response;
             })
             .catch(err => {
-                let response = "400 ";
-                if (typeof err === "object" && err.code) {
-                    response = `${err.code} ${command.argument} ${err.message}`;
-                }
-
+                let response = err.errorCode || 400;
+                response = err.error ? response + " " + err.error : response + " Unknown error";
                 response += "\r\n";
                 return response;
             });

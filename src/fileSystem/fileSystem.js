@@ -48,12 +48,9 @@ module.exports = {
         // The path is the path provided by the client as an argument to the
         // CWD command. Some clients provide an absolute path and some a
         // relative path. FTP is so much fun.
-        if (path === "/") {
-            return rootEntry;
-        }
-
-        let parentEntry = path.startsWith("/") ? rootEntry : currentEntry;
-        return Promise.resolve(getDirectoryEntryForPath.call(this, rootEntry, parentEntry, path));
+        let nextPath = buildFullyQualifiedPath(rootEntry, currentEntry, path);
+        let nextParts = trimPathEnds(nextPath).split("/");
+        return Promise.resolve(getDirectoryEntryForPath.call(this, nextParts, 1, rootEntry));
     },
 
     getMetadata(entry) {
@@ -77,139 +74,69 @@ module.exports = {
 };
 
 
-function buildFullyQualifiedPath(rootEntry, clientPath) {
+function buildFullyQualifiedPath(rootEntry, currentEntry, clientPath) {
     if (!clientPath || clientPath.length < 1) {
-        throw "fileSystem.js getDirectoryEntryForPath - path is null, undefined, or empty.";
+        throw { message: "Requested path is null, undefined, or empty.", errorCode: "550", error: "No such directory"};
     }
 
     if (clientPath === "/") {
         return rootEntry.fullPath;
     }
 
-    // If the path starts with root (/) then simply build a fully qualified path.
-    if (clientPath.startsWith("/")) {
-        return "/" + trimPathEnds(rootEntry.fullPath) + "/" + trimPathEnds(clientPath) + "/";
+    // If the client sent an absolute path the base is root. For relative paths
+    // the base is the current directory.
+    let baseEntry = clientPath.startsWith("/") ? rootEntry : currentEntry;
+
+    let currentParts = trimPathEnds(baseEntry.fullPath).split("/");
+    let clientParts = trimPathEnds(clientPath).split("/");
+    while (0 < clientParts.length) {
+        let dir = clientParts.shift();
+
+        // ".."
+        // Remove the last entry from the current path.
+        if (dir === "..") {
+            currentParts.pop();
+            continue;
+        }
+
+        // relative path
+        // Everything else just add the current entry.
+        currentParts.push(dir);
     }
     
-    // "."
-    
-    // ".."
-    
-    // relative path
+    let nextPath = "/" + currentParts.join("/"); // Don't append a trailing '/'. If this is the root there will be double forward solidus ('//') which is bad.
+    if (!nextPath.endsWith("/")){
+        nextPath += "/";
+    }
 
+    if (!nextPath.startsWith(rootEntry.fullPath)){
+        throw { message: `Requested path '${nextPath}' is outside the root path '${rootEntry.fullPath}'.`, errorCode: 550, error: "No such directory"};
+    }
+    
+    return nextPath;
 }
 
-
-function getDirectoryEntryForPath(rootEntry, parentEntry, path) {
-    if (!path || path.length < 1) {
-        throw "fileSystem.js getDirectoryEntryForPath - path is null, undefined, or empty.";
-    }
-
-    if (path === "/") {
-        return rootEntry;
-    }
-
-    // If the path starts with root (/) then simply build a fully qualified path
-
-
-    let p = trimPathEnds(path);
-    let e = parentEntry;
-    if (p.startsWith("..")) {
-        let parts = p.split("/");
-        while (0 < parts.length) {
-            if (parts[parts.length - 1] !== "..") {
-                break;
-            }
-
-            parts.shift();
-            e = e.filesystem.root;
-            if (!e.filesystem.root.fullPath.startsWith(rootEntry.fullPath)) {
-                throw { message: "Directory does not exist.", code: 550 };
-            }
-        }
-
-        if (parts.length < 1) {
-            return e;
-        }
-
-        p = parts.join("/");
+function getDirectoryEntryForPath(pathParts, nextIndex, pathEntry) {
+    if (pathParts.length <= nextIndex){
+        return pathEntry;
     }
 
     let self = this;
-    return this.getDirectoryEntries(e)
+    return this.getDirectoryEntries(pathEntry)
         .then(entries => {
-            let parts = p.split("/");
-            let name = parts.shift();
-
-            let found = entries.find(e => e.isDirectory && e.name === name);
+            let next = pathParts[nextIndex];
+            let found = entries.find(e => e.isDirectory && e.name === next);
             if (!found) {
-                throw `fileSystem.js getDirectoryEntryForPath - directory "${name}" does not exist. Starting path: "${path}".`;
+                throw `fileSystem.js getDirectoryEntryForPath - directory '${next}' does not exist.`;
             }
 
-
-            if (parts.length < 1) {
+            if (pathParts.length - 1 <= nextIndex) {
                 return found;
             }
 
-            return Promise.resolve(getDirectoryEntryForPath.call(self, rootEntry, found, parts.join("/")));
+            return Promise.resolve(getDirectoryEntryForPath.call(self, pathParts, nextIndex + 1, found));
         });
 }
-
-/**
- * Takes a directory entry and a path and returns the new entry and a modified path for the next entry.
- */
-// function getDirectoryEntry(fileSystem, entry, path) {
-//     if (!path || path.length < 1) {
-//         throw "fileSystem.js getDirectoryEntry() - path is null, undefined, or empty.";
-//     }
-
-//     var err = null;
-//     var firstSolidusIndex = path.indexOf("/");
-//     var result = null;
-//     if (firstSolidusIndex === 0) {
-//         // Does path start with root ('/')?
-//         // The entry should be the root; return it.
-//         result = entry;
-//     } else if (path.startsWith("..")) {
-//         // Does path start with move to parent ("..")?
-//         // Get the parent entry of entry and return it.
-//         result = fileSystem.getParent(entry);
-//     } else {
-//         // Otherwise a subdirectory name.
-//         // Get the characters up to, but not including, the first '/'.
-//         // Get the entry subs. If none of their names match the sub name set an error.
-//         // Otherwise return the sub entry.
-//         result = fileSystem.getDirectoryEntries(entry)
-//             .then(entries => {
-//                 let name = 0 < firstSolidusIndex ? path.substring(0, firstSolidusIndex) : path;
-//                 let found = entries.find(e => e.isDirectory && e.name === name);
-//                 if (!found) {
-//                     err = `fileSystem.js getDirectoryEntry() - directory "${name}" does not exist. Starting path: "${path}".`;
-//                     return null;
-//                 }
-
-//                 return found;
-//             });
-//     }
-
-//     // NO! Do this check in calling code!    
-//     // Is this directory contained in the root directory? Return error if not.
-
-//     return Promise.resolve(result)
-//         .then(nextEntry => {
-//             if (err) {
-//                 throw err;
-//             }
-
-//             // Strip off all characters from the up to and including the first instance of '/'.
-//             var nextPath = 0 < firstSolidusIndex ? path.slice(firstSolidusIndex + 1) : null;
-
-//             // Return the entry and next path. Destructuring function return example code follows:
-//             // return [nextPath, foundEntry];
-//             // var np, fe; [np fe] = getDirectoryEntry(foo, bar); 
-//             return [nextPath, nextEntry];
-//         });
-// }
 
 function readAllDirectoryEntries(reader, accumulator) {
 
