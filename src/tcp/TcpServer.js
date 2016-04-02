@@ -139,23 +139,28 @@ class TcpServer extends EventEmitter {
             });
     }
 
+    /**
+     * Send data from the server to the client.
+     * @param {number} clientSocketId Send data on this scoket.
+     * @param {ArrayBuffer|function} data To send a single block of data use an ArrayBuffer. To stream data (like large files) this should be a callback function with no arguments. The callback returns a promise that resolves to an ArrayBuffer.
+     */
     send(clientSocketId, data) {
-        const self = this;
-        return new Promise(function(resolve, reject) {
-            log.verbose(`${self._logName}[${self._instanceCount}].send - client socket ${clientSocketId} sent.`);
-            chrome.sockets.tcp.send(clientSocketId, data, sendInfo => {
-                if (sendInfo.resultCode < 0) {
-                    reject(sendInfo);
-                    return;
-                }
+        if (typeof data === "function") {
+            return sendAllData(clientSocketId, data);
+        } else {
+            const self = this;
+            return new Promise(function(resolve, reject) {
+                log.verbose(`${self._logName}[${self._instanceCount}].send - client socket ${clientSocketId} sent.`);
+                chrome.sockets.tcp.send(clientSocketId, data, sendInfo => {
+                    if (sendInfo.resultCode < 0) {
+                        reject(sendInfo);
+                        return;
+                    }
 
-                resolve(sendInfo);
+                    resolve(sendInfo);
+                });
             });
-        });
-    }
-
-    sendStream(clientSocketId, getDataCallback) {
-        return sendAllData(clientSocketId, getDataCallback);
+        }
     }
 
     set port(port) {

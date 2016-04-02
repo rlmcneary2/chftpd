@@ -282,7 +282,8 @@ var _supportedCommands = {
             }).then(file => {
                 logger.verbose(`CommandHandler.retr() - file size ${file.size}.`);
                 let start = 0;
-                return clientSocket.passiveServer.sendStream(clientSocket.passiveServer.clientSocketId, () => {
+                //return clientSocket.passiveServer.sendStream(clientSocket.passiveServer.clientSocketId, () => {
+                return clientSocket.passiveServer.send(clientSocket.passiveServer.clientSocketId, () => {
                     if (file.size <= start) {
                         return null;
                     }

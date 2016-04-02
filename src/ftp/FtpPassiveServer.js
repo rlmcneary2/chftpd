@@ -24,21 +24,25 @@ class FtpPassiveServer extends TcpServer {
     }
 
     send(clientSocketId, message, binaryDataTransfer) {
-        log.verbose(`${this._logName}[${this._instanceCount}].send - message [${message.trim()}]`);
-        let encodedMessage = null;
-        if (binaryDataTransfer) {
-            encodedMessage = this._sendEncoder.encode(message);
+        if (typeof message === "function") {
+            return super.send(clientSocketId, message);
         } else {
-            encodedMessage = new Int8Array(message.length);
-            for (let i = 0; i < message.length; i++) {
-                encodedMessage[i] = message.charCodeAt(i);
+            log.verbose(`${this._logName}[${this._instanceCount}].send - message [${message.trim()}]`);
+            let encodedMessage = null;
+            if (binaryDataTransfer) {
+                encodedMessage = this._sendEncoder.encode(message);
+            } else {
+                encodedMessage = new Int8Array(message.length);
+                for (let i = 0; i < message.length; i++) {
+                    encodedMessage[i] = message.charCodeAt(i);
+                }
             }
-        }
 
-        return Promise.resolve(super.send(clientSocketId, encodedMessage.buffer))
-            .then(result => {
-                log.verbose(`${this._logName}[${this._instanceCount}].send - result [${JSON.stringify(result)}].`);
-            });
+            return Promise.resolve(super.send(clientSocketId, encodedMessage.buffer))
+                .then(result => {
+                    log.verbose(`${this._logName}[${this._instanceCount}].send - result [${JSON.stringify(result)}].`);
+                });
+        }
     }
 
     set sendEncoder(encoder) {
