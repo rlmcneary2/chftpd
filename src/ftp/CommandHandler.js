@@ -51,7 +51,6 @@ class CommandHandler {
 var _supportedCommands = {
 
     cwd(server, clientSocket, command) {
-        // Is the requested directory acessible?
         var promise = [Promise.resolve(server.getRootDirectoryEntry())];
         if (clientSocket.currentDirectoryEntryId) {
             promise.push(Promise.resolve(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId)));
@@ -94,7 +93,7 @@ var _supportedCommands = {
     //     return Promise.resolve(sendHandler(response));
     // },
 
-    list(server, clientSocket, command) {
+    list(server, clientSocket) {
 
         // TODO: has the data connection expired? If so send an error response.
 
@@ -262,6 +261,61 @@ var _supportedCommands = {
             });
     },
 
+    retr(server, clientSocket, command) {
+        const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        server.send(clientSocket.socketId, mark);
+
+        let promise = [Promise.resolve(server.getRootDirectoryEntry())];
+        if (clientSocket.currentDirectoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId)));
+        }
+
+        let rootEntry;
+        return Promise.all(promise)
+            .then(results => {
+                rootEntry = results[0];
+                let currentEntry = results[1];
+                return Promise.resolve(fileSystem.getFileSystemEntryForPath(rootEntry, currentEntry || rootEntry, command.argument));
+            })
+            .then(entry => {
+                return fileSystem.getFile(entry);
+            }).then(file => {
+                logger.verbose(`CommandHandler.retr() - file size ${file.size}.`);
+                let start = 0;
+                return clientSocket.passiveServer.sendStream(clientSocket.passiveServer.clientSocketId, () => {
+                    if (file.size <= start) {
+                        return null;
+                    }
+
+                    let end = start + server.streamBufferSize;
+                    end = end < file.size ? end : file.size;
+                    logger.verbose(`CommandHandler.retr() - next transfer total bytes ${end}.`);
+
+                    let currentStart = start;
+                    start += server.streamBufferSize;
+
+                    let blob = file.slice(currentStart, end);
+                    return blobToArrayBuffer(blob);
+                });
+            })
+            .then(() => {
+                logger.verbose(`CommandHandler.retr() - connection send is finished.`);
+                return Promise.resolve(clientSocket.passiveServer.close());
+            })
+            .then(() => {
+                logger.verbose("CommandHandler.retr() - passive server is closed.");
+                clientSocket.passiveServer = null;
+                return "226 Transfer complete\r\n";
+            })
+            .catch(err => {
+                logger.error(err);
+                if (clientSocket && clientSocket.passiveServer) {
+                    clientSocket.passiveServer = null;
+                }
+                return "451 Server RETR error.\r\n";
+            });
+    },
+
     syst() {
         // Much like the http user-agent header SYST has become pointless.
         // Return a supposedly meaningless server string.
@@ -269,19 +323,22 @@ var _supportedCommands = {
     },
 
     type(server, clientSocket, command) {
-        var status = "502 ";
-        var fileTransferType = command.argument.toUpperCase();
-        switch (fileTransferType) {
-            case "A":
-                clientSocket.binaryDataTransfer = false;
-                status = "200 ";
-                break;
+        var status = "200 ";
 
-            case "I":
-                clientSocket.binaryDataTransfer = true;
-                status = "200 ";
-                break;
-        }
+        // All transfers are binary.
+
+        // var fileTransferType = command.argument.toUpperCase();
+        // switch (fileTransferType) {
+        //     case "A":
+        //         clientSocket.binaryDataTransfer = false;
+        //         status = "200 ";
+        //         break;
+
+        //     case "I":
+        //         clientSocket.binaryDataTransfer = true;
+        //         status = "200 ";
+        //         break;
+        // }
 
         return `${status}\r\n`;
     },
@@ -316,6 +373,17 @@ var _supportedCommands = {
 
 module.exports = CommandHandler;
 
+
+function blobToArrayBuffer(blob) {
+    return new Promise(resolve => {
+        let reader = new FileReader();
+        reader.onload = function() {
+            resolve(this.result);
+        };
+
+        reader.readAsArrayBuffer(blob);
+    });
+}
 
 /**
  * Create a text string with specific padding.
