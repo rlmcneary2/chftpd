@@ -30,6 +30,18 @@ module.exports = {
         });
     },
 
+    getFile(entry) {
+        return new Promise((resolve, reject) => {
+            try {
+                entry.file(file => {
+                    resolve(file);
+                });
+            } catch (err) {
+                reject(err);
+            }
+        });
+    },
+
     getFileSystemEntry(id) {
         return new Promise((resolve, reject) => {
             chrome.fileSystem.restoreEntry(id, function(entry) {
@@ -76,7 +88,7 @@ module.exports = {
 
 function buildFullyQualifiedPath(rootEntry, currentEntry, clientPath) {
     if (!clientPath || clientPath.length < 1) {
-        throw { message: "Requested path is null, undefined, or empty.", errorCode: "550", error: "No such directory"};
+        throw { message: "Requested path is null, undefined, or empty.", errorCode: "550", error: "No such directory" };
     }
 
     if (clientPath === "/") {
@@ -103,21 +115,21 @@ function buildFullyQualifiedPath(rootEntry, currentEntry, clientPath) {
         // Everything else just add the current entry.
         currentParts.push(dir);
     }
-    
+
     let nextPath = "/" + currentParts.join("/"); // Don't append a trailing '/'. If this is the root there will be double forward solidus ('//') which is bad.
-    if (!nextPath.endsWith("/")){
+    if (!nextPath.endsWith("/")) {
         nextPath += "/";
     }
 
-    if (!nextPath.startsWith(rootEntry.fullPath)){
-        throw { message: `Requested path '${nextPath}' is outside the root path '${rootEntry.fullPath}'.`, errorCode: 550, error: "No such directory"};
+    if (!nextPath.startsWith(rootEntry.fullPath)) {
+        throw { message: `Requested path '${nextPath}' is outside the root path '${rootEntry.fullPath}'.`, errorCode: 550, error: `${clientPath} No such directory` };
     }
-    
+
     return nextPath;
 }
 
 function getDirectoryEntryForPath(pathParts, nextIndex, pathEntry) {
-    if (pathParts.length <= nextIndex){
+    if (pathParts.length <= nextIndex) {
         return pathEntry;
     }
 
@@ -125,12 +137,13 @@ function getDirectoryEntryForPath(pathParts, nextIndex, pathEntry) {
     return this.getDirectoryEntries(pathEntry)
         .then(entries => {
             let next = pathParts[nextIndex];
-            let found = entries.find(e => e.isDirectory && e.name === next);
+            //let found = entries.find(e => e.isDirectory && e.name === next);
+            let found = entries.find(e => e.name === next);
             if (!found) {
                 throw `fileSystem.js getDirectoryEntryForPath - directory '${next}' does not exist.`;
             }
 
-            if (pathParts.length - 1 <= nextIndex) {
+            if (pathParts.length - 1 <= nextIndex || found.isFile) {
                 return found;
             }
 
@@ -139,7 +152,6 @@ function getDirectoryEntryForPath(pathParts, nextIndex, pathEntry) {
 }
 
 function readAllDirectoryEntries(reader, accumulator) {
-
     return new Promise(resolve => {
         reader.readEntries(function(entries) {
             resolve(entries);
@@ -154,7 +166,6 @@ function readAllDirectoryEntries(reader, accumulator) {
 
             return accumulator;
         });
-
 }
 
 function trimPathEnds(path) {
