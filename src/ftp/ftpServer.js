@@ -32,7 +32,12 @@ class FtpServer extends TcpServer {
     }
 
     close() {
+        this.removeListener("accept", this._acceptEventHandler);
+        this.removeListener("receive", this._receiveEventHandler);
+
+        this._acceptEventHandler = null;
         this._commandHandler = null;
+        this._receiveEventHandler = null;
         this._rootDirectoryEntry = null;
         this._rootDirectoryEntryId = null;
         this._sendEncoder = null;
