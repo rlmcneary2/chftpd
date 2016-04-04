@@ -262,7 +262,7 @@ var _supportedCommands = {
     },
 
     retr(server, clientSocket, command) {
-        const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for /bin/ls.\r\n`;
+        const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
         server.send(clientSocket.socketId, mark);
 
         let promise = [Promise.resolve(server.getRootDirectoryEntry())];
@@ -314,6 +314,85 @@ var _supportedCommands = {
                     clientSocket.passiveServer = null;
                 }
                 return "451 Server RETR error.\r\n";
+            });
+    },
+
+    stor(server, clientSocket, command) {
+        // Get the path to the parent directory of the file. 
+        let lastIndex = command.argument.lastIndexOf("/");
+        let path = lastIndex < 0 ? "/" : command.argument.substring(0, lastIndex);
+        let fileName = command.argument.substring(lastIndex + 1);
+
+        let promise = [Promise.resolve(server.getRootDirectoryEntry())];
+        if (clientSocket.currentDirectoryEntryId) {
+            promise.push(Promise.resolve(fileSystem.getFileSystemEntry(clientSocket.currentDirectoryEntryId)));
+        }
+
+        let rootEntry;
+        return Promise.all(promise)
+            .then(results => {
+                rootEntry = results[0];
+                let currentEntry = results[1];
+                return Promise.resolve(fileSystem.getFileSystemEntryForPath(rootEntry, currentEntry || rootEntry, path));
+            })
+            .then(entry => {
+                return fileSystem.getFileWriter(entry, fileName);
+            })
+            .then(writer => {
+                return new Promise((resolve) => {
+                    let count = 0;
+                    clientSocket.passiveServer.receiveHandlerCallback = data => {
+
+                        count++;
+                        logger.verbose(`CommandHandler.stor() - received ${count}.`);
+
+
+
+                        let dataView = new DataView(data);
+                        let blob = new Blob([dataView]);
+                        logger.verbose(`CommandHandler.stor() - writing ${count} blob size ${blob.size} to file ${fileName}.`);
+
+                        return fileSystem.writeToFile(writer, blob, true)
+                            .then(() => {
+                                // const mark = `150 Continue ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
+                                // server.send(clientSocket.socketId, mark);
+                            });
+
+
+
+                        // return fileSystem.writeFile(entry, fileName, () => {
+                        //     logger.verbose(`CommandHandler.stor() - writeFile ${fileName} callback.`);
+                        //     let dataView = new DataView(data);
+                        //     let blob = new Blob([dataView]);
+                        //     logger.verbose(`CommandHandler.stor() - writing ${count} blob size ${blob.size} to file ${fileName}.`);
+                        //     return Promise.resolve(blob);
+                        // })
+                        //     .then(() => {
+                        //         const mark = `150 Continue ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
+                        //         server.send(clientSocket.socketId, mark);
+                        //     });
+
+                    };
+
+                    const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
+                    server.send(clientSocket.socketId, mark);
+                });
+            })
+            .then(() => {
+                logger.verbose(`CommandHandler.stor() - connection send is finished.`);
+                return Promise.resolve(clientSocket.passiveServer.close());
+            })
+            .then(() => {
+                logger.verbose("CommandHandler.stor() - passive server is closed.");
+                clientSocket.passiveServer = null;
+                return "226 Transfer complete\r\n";
+            })
+            .catch(err => {
+                logger.error(err);
+                if (clientSocket && clientSocket.passiveServer) {
+                    clientSocket.passiveServer = null;
+                }
+                return "451 Server STOR error.\r\n";
             });
     },
 
