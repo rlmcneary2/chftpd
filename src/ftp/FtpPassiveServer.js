@@ -11,16 +11,34 @@ class FtpPassiveServer extends TcpServer {
         super();
         this._logName = "FtpPassiveServer";
         this._maxConnections = 1;
+        this._receiveEventHandler = receiveHandler.bind(this);
+        this._receiveHandlerCallback;
         this._sendEncoder = null;
     }
 
     close() {
+        this.removeListener("receive", this._receiveEventHandler);
+        this._receiveEventHandler = null;
+        this._receiveHandlerCallback = null;
         this._sendEncoder = null;
         super.close();
     }
 
     get clientSocketId() {
         return this.clientSockets.keys().next().value;
+    }
+
+    get receiveBufferSize() {
+        return 1024 * 100;
+    }
+    
+    get receiveHandlerCallback(){
+        return this._receiveHandlerCallback;
+    }
+
+    listen(address) {
+        this.addListener("receive", this._receiveEventHandler);
+        return super.listen(address);
     }
 
     send(clientSocketId, message, binaryDataTransfer) {
@@ -45,6 +63,10 @@ class FtpPassiveServer extends TcpServer {
         }
     }
 
+    set receiveHandlerCallback(handler) {
+        this._receiveHandlerCallback = handler;
+    }
+
     set sendEncoder(encoder) {
         this._sendEncoder = encoder;
     }
@@ -53,3 +75,10 @@ class FtpPassiveServer extends TcpServer {
 
 
 module.exports = FtpPassiveServer;
+
+
+function receiveHandler(evt) {
+    if (this.receiveHandlerCallback){
+        this.receiveHandlerCallback (evt.data);
+    }
+}
