@@ -65,6 +65,13 @@ module.exports = {
         return Promise.resolve(getDirectoryEntryForPath.call(this, nextParts, 1, rootEntry));
     },
 
+    getFileWriter(directoryEntry, fileName) {
+        return createFileEntry(directoryEntry, fileName)
+            .then(entry => {
+                return createWriter(entry);
+            });
+    },
+
     getMetadata(entry) {
         return new Promise((resolve, reject) => {
             entry.getMetadata(metaData => {
@@ -81,9 +88,43 @@ module.exports = {
                 resolve(parent);
             });
         });
+    },
+
+    writeToFile(writer, blob, append) {
+        if (!blob) {
+            return;
+        }
+
+        return writeDataToFile(writer, blob, append ? append : false);
     }
 
 };
+
+
+function createWriter(entry) {
+    return new Promise(resolve => {
+        entry.createWriter(writer => {
+            resolve(writer);
+        });
+    });
+}
+
+function writeDataToFile(writer, blob, append) {
+    return new Promise((resolve, reject) => {
+        writer.onwriteend = evt => {
+            resolve(evt);
+        };
+        writer.onerror = evt => {
+            reject(evt);
+        };
+
+        if (append && 0 < writer.length) {
+            writer.seek(writer.length);
+        }
+
+        writer.write(blob);
+    });
+}
 
 
 function buildFullyQualifiedPath(rootEntry, currentEntry, clientPath) {
@@ -126,6 +167,14 @@ function buildFullyQualifiedPath(rootEntry, currentEntry, clientPath) {
     }
 
     return nextPath;
+}
+
+function createFileEntry(directoryEntry, fileName) {
+    return new Promise((resolve) => {
+        directoryEntry.getFile(fileName, { create: true }, entry => {
+            resolve(entry);
+        });
+    });
 }
 
 function getDirectoryEntryForPath(pathParts, nextIndex, pathEntry) {
