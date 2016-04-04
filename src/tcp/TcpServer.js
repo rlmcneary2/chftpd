@@ -20,6 +20,7 @@ class TcpServer extends EventEmitter {
         this._logName = "TcpServer";
         this._maxConnections = 0;
         this._port = 0;
+        this._receiveErrorHandler = null;
         this._receiveHandler = null;
         this._socketId = -1;
     }
@@ -34,6 +35,7 @@ class TcpServer extends EventEmitter {
         this._clientSockets.clear();
         chrome.sockets.tcpServer.onAccept.removeListener(this.acceptHandler);
         chrome.sockets.tcp.onReceive.removeListener(this.eceiveHandler);
+        chrome.sockets.tcp.onReceiveError.removeListener(this.receiveErrorHandler);
 
         const self = this;
         return Promise.all(closePromises)
@@ -83,6 +85,32 @@ class TcpServer extends EventEmitter {
     get port() {
         return this._port;
     }
+    
+    get receiveBufferSize() {
+        return;
+    }
+
+    get receiveErrorHandler() {
+        if (this._receiveErrorHandler === null) {
+            {
+                this._receiveErrorHandler = function(info) {
+                    if (!this.clientSockets.has(info.socketId)) {
+                        return;
+                    }
+
+                    log.info(`${this._logName}[${this._instanceCount}].receiveErrorHandler - server socket ${this.socketId} received error ${info.resultCode} from client socket ${info.socketId}.`);
+
+                    if (info.resultCode === -100) {
+                        // The client closed the socket. Raise the socket closed event.
+                    } else {
+                        this.emit("receiveError", { clientSocketId: info.socketId, data: info.data });
+                    }
+                }.bind(this);
+            }
+        }
+
+        return this._receiveErrorHandler;
+    }
 
     get receiveHandler() {
         if (this._receiveHandler === null) {
@@ -118,11 +146,12 @@ class TcpServer extends EventEmitter {
         log.info(`${this._logName}[${this._instanceCount}].listen - address: ${address}.`);
         this._address = address;
         const self = this;
-        return tcpAsync.tcpCreate()
+        return tcpAsync.tcpCreate(self.receiveBufferSize)
             .then(socketId => {
                 self._socketId = socketId;
                 chrome.sockets.tcpServer.onAccept.addListener(self.acceptHandler);
                 chrome.sockets.tcp.onReceive.addListener(self.receiveHandler);
+                chrome.sockets.tcp.onReceiveError.addListener(self.receiveErrorHandler);
                 return tcpAsync.tcpListen(self.socketId, self._address, self._port);
             })
             .then(() => {
@@ -138,7 +167,7 @@ class TcpServer extends EventEmitter {
                 });
             });
     }
-
+    
     /**
      * Send data from the server to the client.
      * @param {number} clientSocketId Send data on this scoket.
