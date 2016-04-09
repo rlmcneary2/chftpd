@@ -22,6 +22,7 @@ class TcpServer extends EventEmitter {
         this._port = 0;
         this._receiveErrorHandler = null;
         this._receiveHandler = null;
+        this._receiveHandlers = [];
         this._socketId = -1;
     }
 
@@ -85,28 +86,27 @@ class TcpServer extends EventEmitter {
     get port() {
         return this._port;
     }
-    
+
     get receiveBufferSize() {
         return;
     }
 
     get receiveErrorHandler() {
         if (this._receiveErrorHandler === null) {
-            {
-                this._receiveErrorHandler = function(info) {
-                    if (!this.clientSockets.has(info.socketId)) {
-                        return;
-                    }
+            this._receiveErrorHandler = function(info) {
+                if (!this.clientSockets.has(info.socketId)) {
+                    return;
+                }
 
-                    log.info(`${this._logName}[${this._instanceCount}].receiveErrorHandler - server socket ${this.socketId} received error ${info.resultCode} from client socket ${info.socketId}.`);
+                log.info(`${this._logName}[${this._instanceCount}].receiveErrorHandler - server socket ${this.socketId} received error ${info.resultCode} from client socket ${info.socketId}.`);
 
-                    if (info.resultCode === -100) {
-                        // The client closed the socket. Raise the socket closed event.
-                    } else {
-                        this.emit("receiveError", { clientSocketId: info.socketId, data: info.data });
-                    }
-                }.bind(this);
-            }
+                if (info.resultCode === -100) {
+                    // The client closed the socket. Raise the socket closed event.
+                    this.emit("close", { clientSocketId: info.socketId });
+                } else {
+                    this.emit("receiveError", { clientSocketId: info.socketId, data: info.data });
+                }
+            }.bind(this);
         }
 
         return this._receiveErrorHandler;
@@ -114,16 +114,17 @@ class TcpServer extends EventEmitter {
 
     get receiveHandler() {
         if (this._receiveHandler === null) {
-            {
-                this._receiveHandler = function(info) {
-                    if (!this.clientSockets.has(info.socketId)) {
-                        return;
-                    }
+            this._receiveHandler = function(info) {
+                if (!this.clientSockets.has(info.socketId)) {
+                    return;
+                }
 
-                    log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
-                    this.emit("receive", { clientSocketId: info.socketId, data: info.data });
-                }.bind(this);
-            }
+                log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
+
+                for (let i = 0; i < this._receiveHandlers.length; i++) {
+                    this._receiveHandlers[i]({ clientSocketId: info.socketId, data: info.data });
+                }
+            }.bind(this);
         }
 
         return this._receiveHandler;
@@ -167,7 +168,25 @@ class TcpServer extends EventEmitter {
                 });
             });
     }
-    
+
+    registerReceiveHandler(handler) {
+        this._receiveHandlers.push(handler);
+    }
+
+    removeReceiveHandler(handler) {
+        let index = null;
+        for (let i = 0; i < this._receiveHandlers.length; i++) {
+            if (handler === this._receiveHandlers[i]) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index !== null) {
+            this._receiveHandlers.splice(index, 1);
+        }
+    }
+
     /**
      * Send data from the server to the client.
      * @param {number} clientSocketId Send data on this scoket.

@@ -9,16 +9,25 @@ class FtpPassiveServer extends TcpServer {
 
     constructor() {
         super();
+        this._closeEventHandler = closeHandler.bind(this);
+        this._closeHandlerCallback = null;
         this._logName = "FtpPassiveServer";
         this._maxConnections = 1;
         this._receiveEventHandler = receiveHandler.bind(this);
-        this._receiveHandlerCallback;
+        this._receiveErrorHandler = receiveErrorHandler.bind(this);
+        this._receiveErrorHandlerCallback = null;
+        this._receiveHandlerCallback = null;
         this._sendEncoder = null;
     }
 
     close() {
-        this.removeListener("receive", this._receiveEventHandler);
+        this.removeListener("close", this._closeEventHandler);
+        this.removeListener("receiveError", this._receiveErrorHandler);
+        this.removeReceiveHandler(this._receiveEventHandler);
+        this._closeHandlerCallback = null;
         this._receiveEventHandler = null;
+        this._receiveErrorHandler = null;
+        this._receiveErrorHandlerCallback = null;
         this._receiveHandlerCallback = null;
         this._sendEncoder = null;
         super.close();
@@ -28,16 +37,26 @@ class FtpPassiveServer extends TcpServer {
         return this.clientSockets.keys().next().value;
     }
 
+    get closeHandlerCallback() {
+        this._closeHandlerCallback;
+    }
+
     get receiveBufferSize() {
         return 1024 * 100;
     }
-    
-    get receiveHandlerCallback(){
+
+    get receiveErrorHandlerCallback() {
+        return this._receiveErrorHandlerCallback;
+    }
+
+    get receiveHandlerCallback() {
         return this._receiveHandlerCallback;
     }
 
     listen(address) {
-        this.addListener("receive", this._receiveEventHandler);
+        this.addListener("close", this._closeEventHandler);
+        this.addListener("receiveError", this._receiveErrorHandler);
+        this.registerReceiveHandler(this._receiveEventHandler);
         return super.listen(address);
     }
 
@@ -63,6 +82,14 @@ class FtpPassiveServer extends TcpServer {
         }
     }
 
+    set closeHandlerCallback(handler) {
+        this._closeHandlerCallback = handler;
+    }
+
+    set receiveErrorHandlerCallback(handler) {
+        this._receiveErrorHandlerCallback = handler;
+    }
+
     set receiveHandlerCallback(handler) {
         this._receiveHandlerCallback = handler;
     }
@@ -77,8 +104,29 @@ class FtpPassiveServer extends TcpServer {
 module.exports = FtpPassiveServer;
 
 
+function closeHandler(evt) {
+    if (this.closeHandlerCallback) {
+        this.closeHandlerCallback(evt.data);
+    }
+}
+
 function receiveHandler(evt) {
-    if (this.receiveHandlerCallback){
-        this.receiveHandlerCallback (evt.data);
+    if (this.receiveHandlerCallback) {
+        this.receiveHandlerCallback(evt.data);
+    }
+
+    // if (this.receiveHandlerCallback) {
+    //     let data = evt.data;
+    //     chrome.sockets.tcp.getInfo(this.clientSocketId, info => {
+    //         let err = chrome.runtime.lastError;
+    //         log.verbose(`${this._logName}[${this._instanceCount}].receiveHandler - socket alive? info: ${JSON.stringify(info)}, err: ${JSON.stringify(err)}`);
+    //         this.receiveHandlerCallback(data);
+    //     });
+    // }
+}
+
+function receiveErrorHandler(evt) {
+    if (this.receiveErrorHandlerCallback) {
+        this.receiveErrorHandlerCallback(evt.data);
     }
 }

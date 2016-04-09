@@ -320,7 +320,7 @@ var _supportedCommands = {
     stor(server, clientSocket, command) {
         // Get the path to the parent directory of the file. 
         let lastIndex = command.argument.lastIndexOf("/");
-        let path = lastIndex < 0 ? "/" : command.argument.substring(0, lastIndex);
+        let path = lastIndex <= 0 ? "/" : command.argument.substring(0, lastIndex);
         let fileName = command.argument.substring(lastIndex + 1);
 
         let promise = [Promise.resolve(server.getRootDirectoryEntry())];
@@ -339,39 +339,37 @@ var _supportedCommands = {
                 return fileSystem.getFileWriter(entry, fileName);
             })
             .then(writer => {
-                return new Promise((resolve) => {
-                    let count = 0;
+                return new Promise(resolve => {
+                    let buffer = [];
+                    let isAppend = false;
                     clientSocket.passiveServer.receiveHandlerCallback = data => {
+                        // The first time append is false, all subsequent times append is true. 
+                        let append = isAppend;
+                        isAppend = true;
 
-                        count++;
-                        logger.verbose(`CommandHandler.stor() - received ${count}.`);
+                        // Only get back a promise the first time a write
+                        // request is made. All subsequent requests will return
+                        // null. The promise resolves when all the buffered
+                        // data is written.
+                        let promise = writeReceivedDataToFile(data, writer, buffer, append);
+                        if (!promise) {
+                            return;
+                        }
 
-
-
-                        let dataView = new DataView(data);
-                        let blob = new Blob([dataView]);
-                        logger.verbose(`CommandHandler.stor() - writing ${count} blob size ${blob.size} to file ${fileName}.`);
-
-                        return fileSystem.writeToFile(writer, blob, true)
+                        promise
                             .then(() => {
-                                // const mark = `150 Continue ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
-                                // server.send(clientSocket.socketId, mark);
+                                // The buffer may be empty, but that doesn't
+                                // mean all the data has been uploaded, check
+                                // to see if the socket is still connected.
+                                // Only resolve when it is not.                                
+                                logger.verbose("CommandHandler.stor() - buffer empty.");
+                                chrome.sockets.tcp.getInfo(clientSocket.passiveServer.clientSocketId, info => {
+                                    logger.verbose(`CommandHandler.stor() - socket info: ${JSON.stringify(info)}`);
+                                    if (!info.connected) {
+                                        resolve();
+                                    }
+                                });
                             });
-
-
-
-                        // return fileSystem.writeFile(entry, fileName, () => {
-                        //     logger.verbose(`CommandHandler.stor() - writeFile ${fileName} callback.`);
-                        //     let dataView = new DataView(data);
-                        //     let blob = new Blob([dataView]);
-                        //     logger.verbose(`CommandHandler.stor() - writing ${count} blob size ${blob.size} to file ${fileName}.`);
-                        //     return Promise.resolve(blob);
-                        // })
-                        //     .then(() => {
-                        //         const mark = `150 Continue ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
-                        //         server.send(clientSocket.socketId, mark);
-                        //     });
-
                     };
 
                     const mark = `150 Opening ${clientSocket.binaryDataTransfer ? "BINARY" : "ASCII"} mode data connection for ${command.argument}.\r\n`;
@@ -379,7 +377,7 @@ var _supportedCommands = {
                 });
             })
             .then(() => {
-                logger.verbose(`CommandHandler.stor() - connection send is finished.`);
+                logger.verbose(`CommandHandler.stor() - connection receive is finished.`);
                 return Promise.resolve(clientSocket.passiveServer.close());
             })
             .then(() => {
@@ -488,4 +486,50 @@ function escapePath(path) {
 
     // Replace "device control two" with null.
     return escapedPath.replace("\u0012", "\u0000");
+}
+
+let _isWriting = false;
+function writeReceivedDataToFile(data, writer, buffer, append) {
+    buffer.push(data);
+    if (!_isWriting) {
+        _isWriting = true;
+        let promise = writeBufferToFile(writer, buffer, append)
+            .then(() => {
+                _isWriting = false;
+            });
+
+        return promise;
+    }
+
+    return null;
+}
+
+let _writeCount = 0;
+function writeBufferToFile(writer, buffer, append) {
+    return new Promise(resolve => {
+        if (buffer.length < 1) {
+            logger.info("CommandHandler.js writeBufferToFile - buffer empty. No more to write.");
+
+            resolve(null);
+            return;
+        }
+
+        let dataViews = [];
+        while (0 < buffer.length) {
+            dataViews.push(new DataView(buffer.shift()));
+        }
+        let blob = new Blob(dataViews);
+        
+        let count = _writeCount++;
+        logger.verbose(`CommandHandler.js writeReceivedDataToFile - file write ${count} starting.`);
+        
+        fileSystem.writeToFile(writer, blob, append)
+            .then(() => {
+                logger.verbose(`CommandHandler.js writeReceivedDataToFile - file write ${count} finished.`);
+                return writeBufferToFile(writer, buffer, true);
+            })
+            .then(() => {
+                resolve(null);
+            });
+    });
 }
