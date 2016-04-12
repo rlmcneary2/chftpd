@@ -22,7 +22,6 @@ class TcpServer extends EventEmitter {
         this._port = 0;
         this._receiveErrorHandler = null;
         this._receiveHandler = null;
-        this._receiveHandlers = [];
         this._socketId = -1;
     }
 
@@ -120,10 +119,7 @@ class TcpServer extends EventEmitter {
                 }
 
                 log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
-
-                for (let i = 0; i < this._receiveHandlers.length; i++) {
-                    this._receiveHandlers[i]({ clientSocketId: info.socketId, data: info.data });
-                }
+                this.emit("receive", { clientSocketId: info.socketId, data: info.data });
             }.bind(this);
         }
 
@@ -167,24 +163,6 @@ class TcpServer extends EventEmitter {
                     });
                 });
             });
-    }
-
-    registerReceiveHandler(handler) {
-        this._receiveHandlers.push(handler);
-    }
-
-    removeReceiveHandler(handler) {
-        let index = null;
-        for (let i = 0; i < this._receiveHandlers.length; i++) {
-            if (handler === this._receiveHandlers[i]) {
-                index = i;
-                break;
-            }
-        }
-
-        if (index !== null) {
-            this._receiveHandlers.splice(index, 1);
-        }
     }
 
     /**

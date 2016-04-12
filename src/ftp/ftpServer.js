@@ -33,8 +33,7 @@ class FtpServer extends TcpServer {
 
     close() {
         this.removeListener("accept", this._acceptEventHandler);
-        //this.removeListener("receive", this._receiveEventHandler);
-        this.removeReceiveHandler(this._receiveEventHandler);
+        this.removeListener("receive", this._receiveEventHandler);
         this._acceptEventHandler = null;
         this._commandHandler = null;
         this._receiveEventHandler = null;
@@ -133,8 +132,7 @@ class FtpServer extends TcpServer {
 
     listen(address) {
         this.addListener("accept", this._acceptEventHandler);
-        //this.addListener("receive", this._receiveEventHandler);
-        this.registerReceiveHandler(this._receiveEventHandler);
+        this.addListener("receive", this._receiveEventHandler);
         return super.listen(address);
     }
 

@@ -22,8 +22,8 @@ class FtpPassiveServer extends TcpServer {
 
     close() {
         this.removeListener("close", this._closeEventHandler);
+        this.removeListener("receive", this._receiveErrorHandler);
         this.removeListener("receiveError", this._receiveErrorHandler);
-        this.removeReceiveHandler(this._receiveEventHandler);
         this._closeHandlerCallback = null;
         this._receiveEventHandler = null;
         this._receiveErrorHandler = null;
@@ -55,8 +55,8 @@ class FtpPassiveServer extends TcpServer {
 
     listen(address) {
         this.addListener("close", this._closeEventHandler);
+        this.addListener("receive", this._receiveEventHandler);
         this.addListener("receiveError", this._receiveErrorHandler);
-        this.registerReceiveHandler(this._receiveEventHandler);
         return super.listen(address);
     }
 
