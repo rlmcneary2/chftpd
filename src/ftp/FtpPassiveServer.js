@@ -61,6 +61,11 @@ class FtpPassiveServer extends TcpServer {
     }
 
     send(clientSocketId, message, binaryDataTransfer) {
+        if (!this.clientSockets.has(clientSocketId)) {
+            log.warning(`${this._logName}[${this._instanceCount}].send - no accepted connections for client socket ID ${clientSocketId}.`);
+            throw { message: `No connection accepted for client socket ID ${clientSocketId}.` };
+        }
+
         if (typeof message === "function") {
             return super.send(clientSocketId, message);
         } else {
@@ -114,15 +119,6 @@ function receiveHandler(evt) {
     if (this.receiveHandlerCallback) {
         this.receiveHandlerCallback(evt.data);
     }
-
-    // if (this.receiveHandlerCallback) {
-    //     let data = evt.data;
-    //     chrome.sockets.tcp.getInfo(this.clientSocketId, info => {
-    //         let err = chrome.runtime.lastError;
-    //         log.verbose(`${this._logName}[${this._instanceCount}].receiveHandler - socket alive? info: ${JSON.stringify(info)}, err: ${JSON.stringify(err)}`);
-    //         this.receiveHandlerCallback(data);
-    //     });
-    // }
 }
 
 function receiveErrorHandler(evt) {
