@@ -2,6 +2,7 @@
 
 
 var ftpServer = require("../ftp/ftpServer");
+const log = require("../logging/logger");
 var React = require("react");
 var ServerConfiguration = require("../model/ServerConfiguration");
 
@@ -64,6 +65,9 @@ function componentMounted(){
             if (path){
                 self.setState({ rootEntryName: path });
             }
+        })
+        .catch(err=>{
+            log.error(`main.jsx componentMounted - error getting root directory entry. ${err.message || JSON.stringify(err)}`);
         });
 
     ftpServer.getNetworkInterfaces()
