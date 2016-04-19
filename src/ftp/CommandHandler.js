@@ -146,7 +146,26 @@ var _supportedCommands = {
                 message = lsEntries.join("\r\n") + "\r\n";
 
                 // Get the connection to send the response.
-                return clientSocket.passiveServer.send(clientSocket.passiveServer.clientSocketId, message, clientSocket.binaryDataTransfer);
+                return new Promise((resolve, reject) => {
+                    let sendTimeout = Date.now() + (30 * 1000);
+                    let sendInterval = setInterval(() => {
+                        if (sendTimeout <= Date.now()) {
+                            reject({ message: "Timed out sending message." });
+                            clearInterval(sendInterval);
+                            return;
+                        }
+
+                        clientSocket.passiveServer.send(clientSocket.passiveServer.clientSocketId, message, clientSocket.binaryDataTransfer)
+                            .then(() => {
+                                clearInterval(sendInterval);
+                                resolve();
+                                return;
+                            })
+                            .catch(err => {
+                                logger.warning(`CommandHandler list - error sending passive response. '${err.message || JSON.stringify(err)}'`);
+                            });
+                    }, 1000);
+                });
             })
             .then(() => {
                 logger.verbose(`CommandHandler.list() - connection send is finished.`);
@@ -282,7 +301,6 @@ var _supportedCommands = {
             }).then(file => {
                 logger.verbose(`CommandHandler.retr() - file size ${file.size}.`);
                 let start = 0;
-                //return clientSocket.passiveServer.sendStream(clientSocket.passiveServer.clientSocketId, () => {
                 return clientSocket.passiveServer.send(clientSocket.passiveServer.clientSocketId, () => {
                     if (file.size <= start) {
                         return null;
