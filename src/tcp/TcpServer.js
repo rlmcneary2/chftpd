@@ -64,10 +64,27 @@ class TcpServer extends EventEmitter {
                 log.info(`${this._logName}[${this._instanceCount}].acceptHandler - accepted connection from client socket ${info.clientSocketId}.`);
                 this.clientSockets.set(info.clientSocketId, { connected: Date.now(), socketId: info.clientSocketId });
 
-                chrome.sockets.tcp.setPaused(info.clientSocketId, false, () => {
-                    log.verbose(`${this._logName}[${this._instanceCount}].acceptHandler - client socket ${info.clientSocketId} un-paused.`);
-                    this.emit("accept", { clientSocketId: info.clientSocketId });
+                // chrome.sockets.tcp.setPaused(info.clientSocketId, false, () => {
+                //     log.verbose(`${this._logName}[${this._instanceCount}].acceptHandler - client socket ${info.clientSocketId} un-paused.`);
+                //     this.emit("accept", { clientSocketId: info.clientSocketId });
+                // });
+
+
+
+
+                chrome.sockets.tcp.update(info.clientSocketId, { bufferSize: 1028 }, () => {
+                    chrome.sockets.tcp.setPaused(info.clientSocketId, false, () => {
+                        log.verbose(`${this._logName}[${this._instanceCount}].acceptHandler - client socket ${info.clientSocketId} un-paused.`);
+                        this.emit("accept", { clientSocketId: info.clientSocketId });
+                    });
                 });
+
+
+
+
+
+
+
             }.bind(this);
         }
 
@@ -164,6 +181,15 @@ class TcpServer extends EventEmitter {
                 });
             });
     }
+
+    // pauseReceive(clientSocketId, pause, callback) {
+    //     chrome.sockets.tcp.setPaused(clientSocketId, pause, () => {
+    //         log.verbose(`${this._logName}[${this._instanceCount}].pauseReceive - client socket ${clientSocketId} ${pause ? "paused" : "un-paused"}.`);
+    //         if (callback){
+    //             callback();
+    //         }
+    //     });
+    // }
 
     /**
      * Send data from the server to the client.

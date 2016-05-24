@@ -385,6 +385,8 @@ var _supportedCommands = {
                                     logger.verbose(`CommandHandler.stor() - socket info: ${JSON.stringify(info)}`);
                                     if (!info.connected) {
                                         resolve();
+                                    } else {
+                                        // clientSocket.passiveServer.pauseReceive(clientSocket.passiveServer.clientSocketId, false);
                                     }
                                 });
                             });

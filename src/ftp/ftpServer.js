@@ -14,6 +14,7 @@ class FtpServer extends TcpServer {
 
     constructor() {
         super();
+        // this._port = 0;
         this._port = 21;
 
         this._acceptEventHandler = acceptHandler.bind(this);

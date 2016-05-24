@@ -53,6 +53,30 @@ class FtpPassiveServer extends TcpServer {
         return this._receiveHandlerCallback;
     }
 
+    // get receiveHandler() {
+    //     if (this._receiveHandler === null) {
+    //         this._receiveHandler = function(info) {
+    //             if (!this.clientSockets.has(info.socketId)) {
+    //                 return;
+    //             }
+                
+
+
+    //             // this.pauseReceive(info.socketId, true, () => {
+    //             //     log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
+    //             //     this.emit("receive", { clientSocketId: info.socketId, data: info.data });
+    //             // });
+
+
+
+    //             log.info(`${this._logName}[${this._instanceCount}].receiveHandler - server socket ${this.socketId} received from client socket ${info.socketId}.`);
+    //             this.emit("receive", { clientSocketId: info.socketId, data: info.data });
+    //         }.bind(this);
+    //     }
+
+    //     return this._receiveHandler;
+    // }
+
     listen(address) {
         this.addListener("close", this._closeEventHandler);
         this.addListener("receive", this._receiveEventHandler);
