@@ -1,3 +1,6 @@
+"use strict";
+
+
 const action = require("../action/actions");
 const {connect} = require("react-redux");
 const NetworkInterfaces = require("./NetworkInterfaces.jsx");
@@ -7,7 +10,6 @@ module.exports = connect(mapStateToProps, mapDispatchToProps, mergeProps)(Networ
 
 
 function mapStateToProps(state) {
-    debugger;
     return Object.assign({}, state.server);
 }
 
@@ -26,12 +28,32 @@ function mapDispatchToProps(dispatch) {
 }
 
 function mergeProps(stateProps, dispatchProps, ownProps) {
-    debugger;
-    const props = Object.assign({}, ownProps, stateProps, dispatchProps);
+    const modStateProps = {};
+    for (let prop in stateProps) {
+        if (prop === "interfaces" || prop === "interfaceAction") {
+            continue;
+        }
 
-    if (!props.binding.interfaces) {
+        modStateProps[prop] = stateProps[prop];
+    }
+
+    const props = Object.assign({}, ownProps, modStateProps, dispatchProps);
+
+    if (!stateProps.interfaces && !stateProps.interfaceAction) {
         setTimeout(() => {
             props.interfaceGetAll();
+        });
+    }
+
+    if (stateProps.interfaces) {
+        props.interfaces = [];
+        stateProps.interfaces.forEach(item => {
+            props.interfaces.push({
+                address: item.address,
+                onChange: evt => { props.interfaceSelectionChanged(item.address, evt.target.checked); },
+                name: item.name,
+                value: item.selected
+            });
         });
     }
 

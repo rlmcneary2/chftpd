@@ -2,17 +2,16 @@ const React = require("react");
 
 
 module.exports = (props) => {
-    let options = null;
+    let interfaces = null;
     if (props.interfaces) {
-        options = props.interfaces.map(item => {
-            return (<label><input value={item.name} type="checkbox" />{item.address}</label>);
+        interfaces = props.interfaces.map(item => {
+            return (<li key={item.name}><label><input type="checkbox" {...item} />{item.address}</label></li>);
         });
     }
 
     return (
-        <div>
-            {options}
-        </div>
+        <ul id="network-interfaces">
+            {interfaces}
+        </ul>
     );
-
 };
