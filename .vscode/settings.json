@@ -12,7 +12,7 @@
     },
     "javascript.validate.lint.comparisonOperatorsNotStrict": "error",
     "javascript.validate.lint.curlyBracketsMustNotBeOmitted": "warning",
-    "javascript.validate.lint.functionsInsideLoops": "ignore",
+    "javascript.validate.lint.functionsInsideLoops": "warning",
     "javascript.validate.lint.missingSemicolon": "warning",
     "javascript.validate.lint.unusedVariables": "warning"
 }
