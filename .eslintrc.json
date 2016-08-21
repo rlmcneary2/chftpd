@@ -1,4 +1,22 @@
 {
+    "env": {
+        "es6": true,
+        "browser": true,
+        "commonjs": true
+    },
+    "extends": "eslint:recommended",
+    "globals": {
+        "chrome": false
+    },
+    "parserOptions": {
+        "ecmaFeatures": {
+            "jsx": true,
+            "experimentalObjectRestSpread": true
+        }
+    },
+    "plugins": [
+        "react"
+    ],
     "rules": {
         "eqeqeq": 1,
         "indent": [
@@ -18,21 +36,5 @@
             2,
             "always"
         ]
-    },
-    "env": {
-        "es6": true,
-        "browser": true,
-        "commonjs": true
-    },
-    "extends": "eslint:recommended",
-    "ecmaFeatures": {
-        "jsx": true,
-        "experimentalObjectRestSpread": true
-    },
-    "globals": {
-        "chrome": false
-    },
-    "plugins": [
-        "react"
-    ]
+    }
 }
