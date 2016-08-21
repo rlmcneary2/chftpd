@@ -21,11 +21,7 @@ module.exports = {
             const self = this;
             ftpServer.getNetworkInterfaces()
                 .then(result => {
-                    const interfaces = [...result];
-                    interfaces.forEach(item => {
-                        item.selected = false;
-                    });
-                    dispatch(self.interfaceGetAllEnd(interfaces));
+                    dispatch(self.interfaceGetAllEnd(result));
                 });
         };
     },
@@ -40,9 +36,9 @@ module.exports = {
         return { type: this.actions.interfaceGetAllStart };
     },
 
-    interfaceSelectionChanged(address, selected) {
-        log.verbose(`actions.js interfaceSelectionChanged - address=${address}, selected=${selected}`);
-        return { address, selected, type: this.actions.interfaceSelectionChanged };
+    interfaceSelectionChanged(name, selected) {
+        log.verbose(`actions.js interfaceSelectionChanged - name=${name}, selected=${selected}`);
+        return { name, selected, type: this.actions.interfaceSelectionChanged };
     }
 
 };

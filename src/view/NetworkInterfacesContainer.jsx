@@ -6,6 +6,9 @@ const {connect} = require("react-redux");
 const NetworkInterfaces = require("./NetworkInterfaces.jsx");
 
 
+let _gettingInterfaces = false;
+
+
 module.exports = connect(mapStateToProps, mapDispatchToProps, mergeProps)(NetworkInterfaces);
 
 
@@ -20,41 +23,23 @@ function mapDispatchToProps(dispatch) {
             dispatch(action.interfaceGetAll());
         },
 
-        interfaceSelectionChanged(address, selected) {
-            dispatch(action.interfaceSelectionChanged(address, selected));
+        interfaceSelectionChanged(name, selected) {
+            dispatch(action.interfaceSelectionChanged(name, selected));
         }
 
     };
 }
 
 function mergeProps(stateProps, dispatchProps, ownProps) {
-    const modStateProps = {};
-    for (let prop in stateProps) {
-        if (prop === "interfaces" || prop === "interfaceAction") {
-            continue;
-        }
+    const props = Object.assign({}, ownProps, stateProps, dispatchProps);
 
-        modStateProps[prop] = stateProps[prop];
-    }
-
-    const props = Object.assign({}, ownProps, modStateProps, dispatchProps);
-
-    if (!stateProps.interfaces && !stateProps.interfaceAction) {
+    if (!props.interfaces && !_gettingInterfaces) {
+        _gettingInterfaces = true;
         setTimeout(() => {
-            props.interfaceGetAll();
+            dispatchProps.interfaceGetAll();
         });
-    }
-
-    if (stateProps.interfaces) {
-        props.interfaces = [];
-        stateProps.interfaces.forEach(item => {
-            props.interfaces.push({
-                address: item.address,
-                onChange: evt => { props.interfaceSelectionChanged(item.address, evt.target.checked); },
-                name: item.name,
-                value: item.selected
-            });
-        });
+    } else {
+        _gettingInterfaces = false;
     }
 
     return props;
